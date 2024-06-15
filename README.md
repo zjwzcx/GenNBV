@@ -26,21 +26,73 @@
 
 ## 📋 Contents (Coming Soon)
 1. [About](#-about)
-2. [News](#-news)
-3. [Getting Started](#-getting-started)
-4. [Model and Benchmark](#-model-and-benchmark)
-5. [TODO List](#-todo-list)
-6. [Citation](#-citation)
-7. [License](#-license)
-8. [Acknowledgements](#-acknowledgements)
+2. [Getting Started](#-getting-started)
+3. [Model and Benchmark](#-Model-and-Benchmark)
+4. [TODO List](#-todo-list)
+5. [Citation](#-citation)
+6. [License](#-license)
+7. [Acknowledgements](#-acknowledgements)
 
 ## 🏠 About
+<!-- ![Teaser](assets/teaser.jpg) -->
 
-## 🔥 News
+<div style="text-align: center;">
+    <img src="assets/Fig_Teaser.png" alt="Dialogue_Teaser" width=100% >
+</div>
+While recent advances in neural radiance field enable realistic digitization for large-scale scenes, the image-capturing process is still time-consuming and labor-intensive. Previous works attempt to automate this process using the Next-Best-View (NBV) policy for active 3D reconstruction. However, the existing NBV policies heavily rely on hand-crafted criteria, limited action space, or per-scene optimized representations. These constraints limit their cross-dataset generalizability. To overcome them, we propose <b>GenNBV</b>, an end-to-end generalizable NBV policy. Our policy adopts a reinforcement learning (RL)-based framework and extends typical limited action space to 5D free space. It empowers our agent drone to scan from any viewpoint, and even interact with unseen geometries during training. To boost the cross-dataset generalizability, we also propose a novel multi-source state embedding, including geometric, semantic, and action representations. We establish a benchmark using the Isaac Gym simulator with the Houses3K and OmniObject3D datasets to evaluate this NBV policy. Experiments demonstrate that our policy achieves a 98.26% and 97.12% coverage ratio on unseen building-scale objects from these datasets, respectively, outperforming prior solutions.
 
 ## 📚 Getting Started
+### Installation
+
+We test our codes under the following environment:
+
+- Ubuntu 20.04
+- NVIDIA Driver: 545.29.02
+- CUDA 11.3
+- Python 3.8.12
+- PyTorch 1.11.0+cu113
+- PyTorch3D 0.7.5
+
+1. Clone this repository.
+
+```bash
+git clone https://github.com/zjwzcx/GenNBV
+cd GenNBV
+```
+
+2. Create an environment and install PyTorch.
+
+```bash
+conda create -n gennbv python=3.8 -y  # pytorch3d needs python>3.7
+conda activate gennbv
+# Install PyTorch, for example, install PyTorch 1.11.0 for CUDA 11.3
+# For more information, please refer to https://pytorch.org/get-started/locally/
+conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch
+```
+
+3. Install GenNBV.
+
+```bash
+# TODO
+```
+
+### Data Preparation
+
+Please refer to the [guide](data/README.md) for downloading and organization.
+
 
 ## 📦 Model and Benchmark
+### Model Overview
+
+<p align="center">
+  <img src="assets/Fig_Method.png" align="center" width="100%">
+</p>
+
+### Benchmark Overview
+
+<p align="center">
+  <img src="assets/exp_main_table.png" align="center" width="100%">
+</p>
 
 ## 📝 TODO List
 
