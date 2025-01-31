@@ -1,0 +1,8 @@
+from legged_gym.utils.task_registry import task_registry
+from active_reconstruction.env.env_config import DroneCfgPPO
+
+
+# GenNBV
+from active_reconstruction.env.recon_houses3k_gennbv import Recon_Houses3K_GenNBV
+from active_reconstruction.env.env_config_houses3k import ReconDroneConfig_Houses3K
+task_registry.register("recon_houses3k_gennbv", Recon_Houses3K_GenNBV, ReconDroneConfig_Houses3K, DroneCfgPPO)
