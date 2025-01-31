@@ -65,15 +65,21 @@ cd GenNBV
 ```bash
 conda create -n gennbv python=3.8 -y  # pytorch3d needs python>3.7
 conda activate gennbv
-# Install PyTorch, for example, install PyTorch 1.11.0 for CUDA 11.3
-# For more information, please refer to https://pytorch.org/get-started/locally/
-conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch
+pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
 ```
 
-3. Install GenNBV.
+3. NVIDIA Isaac Gym Installation: https://developer.nvidia.com/isaac-gym/download
+```
+cd isaacgym/python
+pip install -e .
+```
 
-```bash
-# TODO
+4. Install GenNBV.
+
+```
+pip install -r requirements.txt
+pip install -e .
+
 ```
 
 ### Data Preparation
