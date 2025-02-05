@@ -24,14 +24,13 @@
 
 </div>
 
-## 📋 Contents (Coming Soon)
+## 📋 Contents
 1. [About](#-about)
 2. [Getting Started](#-getting-started)
 3. [Model and Benchmark](#-Model-and-Benchmark)
-4. [TODO List](#-todo-list)
-5. [Citation](#-citation)
-6. [License](#-license)
-7. [Acknowledgements](#-acknowledgements)
+4. [Citation](#-citation)
+5. [License](#-license)
+
 
 ## 🏠 About
 <!-- ![Teaser](assets/teaser.jpg) -->
@@ -40,6 +39,7 @@
     <img src="assets/Fig_Teaser.png" alt="Dialogue_Teaser" width=100% >
 </div>
 While recent advances in neural radiance field enable realistic digitization for large-scale scenes, the image-capturing process is still time-consuming and labor-intensive. Previous works attempt to automate this process using the Next-Best-View (NBV) policy for active 3D reconstruction. However, the existing NBV policies heavily rely on hand-crafted criteria, limited action space, or per-scene optimized representations. These constraints limit their cross-dataset generalizability. To overcome them, we propose <b>GenNBV</b>, an end-to-end generalizable NBV policy. Our policy adopts a reinforcement learning (RL)-based framework and extends typical limited action space to 5D free space. It empowers our agent drone to scan from any viewpoint, and even interact with unseen geometries during training. To boost the cross-dataset generalizability, we also propose a novel multi-source state embedding, including geometric, semantic, and action representations. We establish a benchmark using the Isaac Gym simulator with the Houses3K and OmniObject3D datasets to evaluate this NBV policy. Experiments demonstrate that our policy achieves a 98.26% and 97.12% coverage ratio on unseen building-scale objects from these datasets, respectively, outperforming prior solutions.
+
 
 ## 📚 Getting Started
 ### Installation
@@ -79,13 +79,17 @@ pip install -e .
 ```
 pip install -r requirements.txt
 pip install -e .
-
 ```
 
 ### Data Preparation
 
 Please refer to the [guide](data/README.md) for downloading and organization.
 
+## 📝 TODO List
+- \[x\] Release the paper and training code.
+- \[x\] Release preprocessed dataset.
+- \[ \] Release the evaluation scripts.
+- \[ \] Polish dataset APIs and related codes.
 
 ## 📦 Model and Benchmark
 ### Model Overview
@@ -100,7 +104,6 @@ Please refer to the [guide](data/README.md) for downloading and organization.
   <img src="assets/exp_main_table.png" align="center" width="100%">
 </p>
 
-## 📝 TODO List
 
 ## 🔗 Citation
 If you find our work helpful, please cite:
@@ -114,10 +117,29 @@ If you find our work helpful, please cite:
 }
 ```
 
-## 📄 License
+If you use the preprocessed dataset such as Houses3K and OmniObject3D, please cite them:
+```bibtex
+@inproceedings{peralta2020next,
+  title={Next-best view policy for 3d reconstruction},
+  author={Peralta, Daryl and Casimiro, Joel and Nilles, Aldrin Michael and Aguilar, Justine Aletta and Atienza, Rowel and Cajote, Rhandley},
+  booktitle={Computer Vision--ECCV 2020 Workshops: Glasgow, UK, August 23--28, 2020, Proceedings, Part IV 16},
+  pages={558--573},
+  year={2020},
+  organization={Springer}
+}
+```
+```bibtex
+@inproceedings{wu2023omniobject3d,
+  title={Omniobject3d: Large-vocabulary 3d object dataset for realistic perception, reconstruction and generation},
+  author={Wu, Tong and Zhang, Jiarui and Fu, Xiao and Wang, Yuxin and Ren, Jiawei and Pan, Liang and Wu, Wayne and Yang, Lei and Wang, Jiaqi and Qian, Chen and others},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={803--814},
+  year={2023}
+}
+```
+We're very grateful to the codebase of Legged Gym (https://github.com/leggedrobotics/legged_gym).
 
+## 📄 License
 <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a>
 <br />
 This work is under the <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>.
-
-## 👏 Acknowledgements
