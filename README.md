@@ -89,7 +89,6 @@ Please refer to the [guide](data/README.md) for downloading and organization.
 - \[x\] Release the paper and training code.
 - \[x\] Release preprocessed dataset.
 - \[ \] Release the evaluation scripts.
-- \[ \] Polish dataset APIs and related codes.
 
 ## 📦 Model and Benchmark
 ### Model Overview
@@ -106,7 +105,7 @@ Please refer to the [guide](data/README.md) for downloading and organization.
 
 
 ## 🔗 Citation
-If you find our work helpful, please cite:
+If you find our work helpful, please cite it:
 
 ```bibtex
 @inproceedings{chen2024gennbv,
