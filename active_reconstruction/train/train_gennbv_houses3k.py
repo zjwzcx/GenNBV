@@ -89,17 +89,6 @@ def main():
             "type": bool,
             "default": False},
         {
-            "name": "--eval_device",
-            "type": str,
-            "default": "cuda:0",
-        },
-        {
-            "name": "--surface_coverage",
-            "type": float,
-            "default": 1.0,
-            "help": "surface coverage ratio"
-        },
-        {
             "name": "--only_positive_rewards",
             "type": bool,
             "default": False,
@@ -120,11 +109,11 @@ def main():
     eval_freq = int(500000/args.num_envs)
 
     use_wandb = not args.stop_wandb
-    args.headless = True
+    
+    # debug
     # args.headless = False  # False: visualization
-
     # args.num_envs = 2
-    use_wandb = False   # debug
+    # use_wandb = False
     # eval_freq = 200
 
     ckpt_path = None

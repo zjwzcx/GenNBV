@@ -694,22 +694,6 @@ def get_args(additional_args=None):
             "help": "Use wandb to log or not"
         },
         {
-            "name": "--num_ini_iter",
-            "type": int,
-        },
-        {
-            "name": "--num_incre",
-            "type": int,
-        },
-        {
-            "name": "--num_incre_iter",
-            "type": int,
-        },
-        {
-            "name": "--num_incre_views",
-            "type": int,
-        },
-        {
             "name": "--mode",
             "type": int,
         },

@@ -83,7 +83,41 @@ pip install -e .
 
 ### Data Preparation
 
-Please refer to the [guide](data/README.md) for downloading and organization.
+<!-- Please refer to the [guide](data/README.md) for downloading and organization. -->
+We provide all the preprocessed data used in our work, including mesh files and ground-truth surface points. We recommend users download the data from our provided Google Drive link [[HERE](https://drive.google.com/drive/folders/1SUcDy8hwluEBpTtKZ3_83ySKnLlsZ4hi?usp=sharing)].
+
+The directory structure should be as follows.
+
+```
+gennbv
+├── active_reconstruction
+├── data_gennbv
+│   ├── houses3k
+│   │   ├── gt
+│   │   ├── obj
+│   │   ├── urdf
+│   ├── omniobject3d
+│   ├── ...
+```
+
+### Training
+
+Please run the following command to reproduce the training setting of GenNBV:
+
+```
+python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --stop_wandb=True
+```
+
+[Weights & Bias](https://wandb.ai/site/) (wandb) are recommended to analyze the training logs. If you want to use wandb in our codebase, please paste your wandb API key into `wandb_utils/wandb_api_key_file.txt`. And then you need to run the following command to launch training:
+
+```
+python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --stop_wandb=False
+```
+
+### Customized Training Environments
+
+If you want customize a novel training environment, you need to create your environment and configuration files in `active_reconstruction/env` and then define the task in `active_reconstruction/__init__.py`.
+
 
 ## 📝 TODO List
 - \[x\] Release the paper and training code.
