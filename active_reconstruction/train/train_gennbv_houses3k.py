@@ -8,7 +8,7 @@ from legged_gym import OPEN_ROBOT_ROOT_DIR
 from legged_gym.utils import task_registry
 from legged_gym.utils.helpers import get_args
 from stable_baselines3.common.callbacks import CallbackList
-from stable_baselines3.common.policies import ActorCriticPolicy_Train_Eval
+from stable_baselines3.common.policies import ActorCriticPolicy_Train
 from stable_baselines3.ppo.ppo_gennbv import PPO_GenNBV
 from stable_baselines3.utils import get_time_str
 from wandb_utils import team_name, project_name
@@ -109,8 +109,8 @@ def main():
     eval_freq = int(500000/args.num_envs)
 
     use_wandb = not args.stop_wandb
-    
-    # debug
+
+    # # debug
     # args.headless = False  # False: visualization
     # args.num_envs = 2
     # use_wandb = False
@@ -137,7 +137,7 @@ def main():
     # ===== Setup the config =====
     config = dict(
         algo=dict(
-            policy=ActorCriticPolicy_Train_Eval,
+            policy=ActorCriticPolicy_Train,
             policy_kwargs=dict(
                 net_arch=[],
                 features_extractor_class=Hybrid_Encoder,
@@ -198,8 +198,8 @@ def main():
     ]
     if use_wandb:
         callbacks.append(
-            WandbCallback(trial_name=trial_name, exp_name=exp_name, project_name=project_name, 
-                          config={**config, **env_cfg_dict})
+            WandbCallback(trial_name=trial_name, exp_name=exp_name, 
+                          project_name=project_name, config={**config, **env_cfg_dict})
         )
     callbacks = CallbackList(callbacks)
 

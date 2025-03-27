@@ -177,7 +177,7 @@ class PPO_Hybrid_Action(OnPolicyAlgorithm_Hybrid_Act):
         """
         Update policy using the currently gathered rollout buffer.
 
-        learn() -> collect_rollouts(), including ActorCriticPolicy_Train_Eval().forward() -> train()
+        learn() -> collect_rollouts(), including ActorCriticPolicy_Train().forward() -> train()
         """
         # Switch to train mode (this affects batch norm / dropout)
         training_start = time.time()

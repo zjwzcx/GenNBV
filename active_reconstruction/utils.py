@@ -214,61 +214,57 @@ def bresenham3D_pycuda(pts_source, pts_target, map_size):
     return results.to(torch.long)
 
 
-def scanned_pts_to_idx_3D(pts_target, range_gt, voxel_size_gt, map_size=256):
+def scanned_pts_to_idx_3D(pts_target, range_gt_scenes, voxel_size_scenes, map_size=256):
     """
     Params:
-        pts_target: [num_env, num_pts, 3], list of torch.tensor, target points by back-projection
+        pts_target: [num_env, num_pts, 3], list of target points by back-projection
         range_gt_scenes: [num_env, 6], (x_max, x_min, y_max, y_min, z_max, z_min) of N_gt
         voxel_size_scenes: [num_env, 3]
 
     Return:
         pts_target_idxs: list of (num_valid_pts_idx, 3)
     """
-    import torch
-    num_env = len(pts_target)
+    num_env = pts_target.shape[0]
 
-    xyz_max_voxel = range_gt[:, [0,2,4]] + 0.5 * voxel_size_gt
-    xyz_min_voxel = range_gt[:, [1,3,5]] - 0.5 * voxel_size_gt
+    xyz_max_voxel = range_gt_scenes[:, [0,2,4]] + 0.5 * voxel_size_scenes
+    xyz_min_voxel = range_gt_scenes[:, [1,3,5]] - 0.5 * voxel_size_scenes
+
+    # [num_env, num_pts, 3], convert to indices
+    pts_target_idx = torch.floor(
+        (pts_target - xyz_min_voxel.unsqueeze(1)) / voxel_size_scenes.unsqueeze(1)
+    ).long()
+
+    # [num_env, num_pts, 3], bounds checking masks
+    bound_mask = (xyz_max_voxel.unsqueeze(1) > pts_target) & (pts_target > xyz_min_voxel.unsqueeze(1))
+    bound_mask = bound_mask.all(dim=-1)  # [num_env, num_pts]
 
     pts_target_idxs = []
     for env_idx in range(num_env):
-        # Convert current environment points to torch tensor
-        pts_env = pts_target[env_idx]
-        
-        # Convert to indices
-        pts_target_idx = torch.floor(
-            (pts_env - xyz_min_voxel[env_idx]) / voxel_size_gt[env_idx]
-        ).long()
+        # Get valid points for this environment
+        valid_pts = pts_target_idx[env_idx][bound_mask[env_idx]]
 
-        # Bounds checking masks
-        bound_mask = (xyz_max_voxel[env_idx] > pts_env) & (pts_env > xyz_min_voxel[env_idx])
-        bound_mask = torch.all(bound_mask, dim=-1)  # [num_pts]
-
-        valid_pts = pts_target_idx[bound_mask]
-
-        if len(valid_pts) == 0:
+        if valid_pts.shape[0] == 0:
             pts_target_idxs.append([])
             continue
 
         # Unique and clip
         valid_pts = torch.unique(valid_pts, dim=0)
-        valid_pts = torch.clamp(valid_pts, min=0, max=map_size-1)
+        valid_pts = torch.clip(valid_pts, min=0, max=map_size-1)
         pts_target_idxs.append(valid_pts)
 
     return pts_target_idxs
-
 
 def pose_coord_to_idx_3D(poses, range_gt, voxel_size_gt, map_size=256, if_col=False):
     """
     Accelerated 3D version of pose coordinate to index conversion
     
     Params:
-        poses: [num_step, 3] or [num_env, num_step, 3], x-y-z pose
+        poses: [num_step, 3], x-y-z pose
         range_gt: [num_env, 6], (x_max, x_min, y_max, y_min, z_max, z_min) of N_gt
         map_size: int, size of the voxel grid (default: 256)
     
     Return:
-        poses_idx: [num_env, 3] or [num_env, num_step, 3]
+        poses_idx: [num_env, 3]
     """
     # Extract minimum bounds for each dimension
     x_min = range_gt[:, 1]  # [num_env]
@@ -281,21 +277,9 @@ def pose_coord_to_idx_3D(poses, range_gt, voxel_size_gt, map_size=256, if_col=Fa
     # Calculate voxel boundaries with offset
     xyz_min_voxel = xyz_min - 0.5 * voxel_size_gt  # [num_env, 3]
     
-    if poses.dim() == 2:
-        # Handle [num_step, 3] case
-        # Convert to [num_env, 3]
-        poses_idx = ((poses - xyz_min_voxel) / voxel_size_gt).floor().long()
-    
-    elif poses.dim() == 3:
-        # Handle [num_env, num_step, 3] case
-        # Add dimension for broadcasting
-        xyz_min_voxel = xyz_min_voxel.unsqueeze(1)  # [num_env, 1, 3]
-        
-        poses_idx = ((poses - xyz_min_voxel) / voxel_size_gt.unsqueeze(1)).floor().long()
-    
-    else:
-        raise ValueError(f"Invalid poses shape: {poses.shape}")
-    
+    assert poses.shape[1] == 3, f"Invalid poses shape: {poses.shape}"
+    poses_idx = ((poses - xyz_min_voxel) / voxel_size_gt).floor().long()
+
     # if not if_col:
     #     # for computing ray casting, clip values to valid range
     #     poses_idx = torch.clip(poses_idx, min=0, max=map_size-1)

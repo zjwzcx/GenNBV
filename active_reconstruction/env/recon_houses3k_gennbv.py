@@ -252,8 +252,8 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
 
         # num_layer lists of (num_valid_pts_idx, 3)
         pts_idx_all = scanned_pts_to_idx_3D(pts_target=pts_target,
-                                            range_gt=self.range_gt_scenes,
-                                            voxel_size_gt=self.voxel_size_gt_scenes,
+                                            range_gt_scenes=self.range_gt_scenes,
+                                            voxel_size_scenes=self.voxel_size_gt_scenes,
                                             map_size=self.grid_size)
  
         pose_idx_3D = pose_coord_to_idx_3D(poses=self.poses[:, :3].clone(),    # last_pose_xyz
