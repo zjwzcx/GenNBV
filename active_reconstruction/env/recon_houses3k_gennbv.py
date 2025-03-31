@@ -4,12 +4,11 @@ from gym.spaces import Box, Dict, MultiDiscrete
 from isaacgym import gymapi, gymtorch
 from isaacgym.torch_utils import *
 import torch
+import numpy as np
 from active_reconstruction.utils import scanned_pts_to_idx_3D, pose_coord_to_idx_3D, \
                                         grid_occupancy_tri_cls, bresenham3D_pycuda
 from torchvision.transforms.functional import rgb_to_grayscale
-import numpy as np
 from active_reconstruction.env.reconstruction_env import ReconstructionDroneEnv
-import open3d as o3d
 from legged_gym import OPEN_ROBOT_ROOT_DIR
 
 
@@ -59,19 +58,19 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         """ load all ground truth """
 
         # [num_scene, X, Y, Z], num_scene == 256， X == Y == Z == 20
-        self.grids_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                               "data_gennbv/houses3k/gt/BAT1234511_SETA_HOUSE_grid_gt.pt"), map_location=self.device)
-        self.grids_gt = torch.flip(self.grids_gt, dims=[2])   # y-axis flip
-        self.grid_size = self.grids_gt.shape[1]
+        grids_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
+                                               "data_gennbv/houses3k/gt/houses3k_train_20_grid_gt.pt"), map_location=self.device)
+        grids_gt = torch.flip(grids_gt, dims=[2])   # y-axis flip
+        self.grid_size = grids_gt.shape[1]
 
         # [num_scene, 3]
-        self.voxel_size_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                                     "data_gennbv/houses3k/gt/BAT1234511_SETA_HOUSE_voxel_size_gt.pt"), map_location=self.device)
+        voxel_size_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
+                                                     "data_gennbv/houses3k/gt/houses3k_train_20_voxel_size_gt.pt"), map_location=self.device)
         # [num_scene]
-        self.num_valid_voxel_gt = self.grids_gt.sum(dim=(1, 2, 3))
+        num_valid_voxel_gt = grids_gt.sum(dim=(1, 2, 3))
         # [num_scene, 6]
         self.range_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                                "data_gennbv/houses3k/gt/BAT1234511_SETA_HOUSE_range_gt.pt"), map_location=self.device)
+                                                "data_gennbv/houses3k/gt/houses3k_train_20_range_gt.pt"), map_location=self.device)
 
         # num_scene -> num_env
         self.env_to_scene = []
@@ -80,21 +79,15 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         self.env_to_scene = torch.tensor(self.env_to_scene, device=self.device)     # [num_env]
 
         self.range_gt_scenes = self.range_gt[self.env_to_scene]
-        self.voxel_size_gt_scenes = self.voxel_size_gt[self.env_to_scene]
-        self.num_valid_voxel_gt_scenes = self.num_valid_voxel_gt[self.env_to_scene]
-        self.grids_gt_scenes = self.grids_gt[self.env_to_scene]
-
-        # del self.range_gt     # used later
-        del self.voxel_size_gt
-        del self.num_valid_voxel_gt
-        del self.grids_gt
-
+        self.voxel_size_gt_scenes = voxel_size_gt[self.env_to_scene]
+        self.num_valid_voxel_gt_scenes = num_valid_voxel_gt[self.env_to_scene]
+        self.grids_gt_scenes = grids_gt[self.env_to_scene]
 
         # NOTE: collision checking, [num_scene, X, Y, Z], reso=128
         self.grids_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                               "data_gennbv/houses3k/gt/houses3k_128_grid_gt.pt"), map_location=self.device)
+                                               "data_gennbv/houses3k/gt/houses3k_train_128_grid_gt.pt"), map_location=self.device)
         self.voxel_size_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                               "data_gennbv/houses3k/gt/houses3k_128_voxel_size_gt.pt"), map_location=self.device)
+                                               "data_gennbv/houses3k/gt/houses3k_train_128_voxel_size_gt.pt"), map_location=self.device)
 
         self.grids_gt_col_scenes = self.grids_gt_col[self.env_to_scene]
         self.voxel_size_gt_col_scenes = self.voxel_size_gt_col[self.env_to_scene]
@@ -252,8 +245,8 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
 
         # num_layer lists of (num_valid_pts_idx, 3)
         pts_idx_all = scanned_pts_to_idx_3D(pts_target=pts_target,
-                                            range_gt_scenes=self.range_gt_scenes,
-                                            voxel_size_scenes=self.voxel_size_gt_scenes,
+                                            range_gt=self.range_gt_scenes,
+                                            voxel_size_gt=self.voxel_size_gt_scenes,
                                             map_size=self.grid_size)
  
         pose_idx_3D = pose_coord_to_idx_3D(poses=self.poses[:, :3].clone(),    # last_pose_xyz

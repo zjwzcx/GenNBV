@@ -114,6 +114,9 @@ python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 
 python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --stop_wandb=False
 ```
 
+### Evaluation
+
+
 ### Customized Training Environments
 
 If you want customize a novel training environment, you need to create your environment and configuration files in `active_reconstruction/env` and then define the task in `active_reconstruction/__init__.py`.

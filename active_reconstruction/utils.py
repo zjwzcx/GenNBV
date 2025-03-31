@@ -214,42 +214,44 @@ def bresenham3D_pycuda(pts_source, pts_target, map_size):
     return results.to(torch.long)
 
 
-def scanned_pts_to_idx_3D(pts_target, range_gt_scenes, voxel_size_scenes, map_size=256):
+def scanned_pts_to_idx_3D(pts_target, range_gt, voxel_size_gt, map_size=256):
     """
     Params:
-        pts_target: [num_env, num_pts, 3], list of target points by back-projection
+        pts_target: [num_env, num_pts, 3], list of torch.tensor, target points by back-projection
         range_gt_scenes: [num_env, 6], (x_max, x_min, y_max, y_min, z_max, z_min) of N_gt
         voxel_size_scenes: [num_env, 3]
 
     Return:
         pts_target_idxs: list of (num_valid_pts_idx, 3)
     """
-    num_env = pts_target.shape[0]
+    num_env = len(pts_target)
 
-    xyz_max_voxel = range_gt_scenes[:, [0,2,4]] + 0.5 * voxel_size_scenes
-    xyz_min_voxel = range_gt_scenes[:, [1,3,5]] - 0.5 * voxel_size_scenes
-
-    # [num_env, num_pts, 3], convert to indices
-    pts_target_idx = torch.floor(
-        (pts_target - xyz_min_voxel.unsqueeze(1)) / voxel_size_scenes.unsqueeze(1)
-    ).long()
-
-    # [num_env, num_pts, 3], bounds checking masks
-    bound_mask = (xyz_max_voxel.unsqueeze(1) > pts_target) & (pts_target > xyz_min_voxel.unsqueeze(1))
-    bound_mask = bound_mask.all(dim=-1)  # [num_env, num_pts]
+    xyz_max_voxel = range_gt[:, [0,2,4]] + 0.5 * voxel_size_gt
+    xyz_min_voxel = range_gt[:, [1,3,5]] - 0.5 * voxel_size_gt
 
     pts_target_idxs = []
     for env_idx in range(num_env):
-        # Get valid points for this environment
-        valid_pts = pts_target_idx[env_idx][bound_mask[env_idx]]
+        # Convert current environment points to torch tensor
+        pts_env = pts_target[env_idx]
+        
+        # Convert to indices
+        pts_target_idx = torch.floor(
+            (pts_env - xyz_min_voxel[env_idx]) / voxel_size_gt[env_idx]
+        ).long()
 
-        if valid_pts.shape[0] == 0:
+        # Bounds checking masks
+        bound_mask = (xyz_max_voxel[env_idx] > pts_env) & (pts_env > xyz_min_voxel[env_idx])
+        bound_mask = torch.all(bound_mask, dim=-1)  # [num_pts]
+
+        valid_pts = pts_target_idx[bound_mask]
+
+        if len(valid_pts) == 0:
             pts_target_idxs.append([])
             continue
 
         # Unique and clip
         valid_pts = torch.unique(valid_pts, dim=0)
-        valid_pts = torch.clip(valid_pts, min=0, max=map_size-1)
+        valid_pts = torch.clamp(valid_pts, min=0, max=map_size-1)
         pts_target_idxs.append(valid_pts)
 
     return pts_target_idxs

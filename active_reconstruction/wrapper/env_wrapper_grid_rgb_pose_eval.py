@@ -73,8 +73,6 @@ def flatten_observation_spaces(observation_spaces, key_sequence):
         if isinstance(value, spaces.Box):
             lower_bound.append(np.asarray(value.low).flatten())
             upper_bound.append(np.asarray(value.high).flatten())
-        else:
-            continue
 
     lower_bound = np.concatenate(lower_bound)
     upper_bound = np.concatenate(upper_bound)
