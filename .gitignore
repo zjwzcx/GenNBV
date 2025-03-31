@@ -115,3 +115,4 @@ log
 *.urdf
 
 data_gennbv/*
+wandb

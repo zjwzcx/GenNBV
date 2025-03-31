@@ -51,7 +51,7 @@ We test our codes under the following environment:
 - CUDA 11.3
 - Python 3.8.12
 - PyTorch 1.11.0+cu113
-- PyTorch3D 0.7.5
+<!-- - PyTorch3D 0.7.5 -->
 
 1. Clone this repository.
 
@@ -63,7 +63,7 @@ cd GenNBV
 2. Create an environment and install PyTorch.
 
 ```bash
-conda create -n gennbv python=3.8 -y  # pytorch3d needs python>3.7
+conda create -n gennbv python=3.8 -y
 conda activate gennbv
 pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
 ```
@@ -105,21 +105,28 @@ gennbv
 Please run the following command to reproduce the training setting of GenNBV:
 
 ```
-python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --stop_wandb=True
+python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --stop_wandb --headless
 ```
 
-[Weights & Bias](https://wandb.ai/site/) (wandb) are recommended to analyze the training logs. If you want to use wandb in our codebase, please paste your wandb API key into `wandb_utils/wandb_api_key_file.txt`. And then you need to run the following command to launch training:
+[Weights & Bias](https://wandb.ai/site/) (wandb) is highly recommended to analyze the training logs. If you want to use wandb in our codebase, please paste your wandb API key into `wandb_utils/wandb_api_key_file.txt`. And then you need to run the following command to launch training:
 
 ```
-python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --stop_wandb=False
+python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --headless
 ```
-
-### Evaluation
-
 
 ### Customized Training Environments
 
 If you want customize a novel training environment, you need to create your environment and configuration files in `active_reconstruction/env` and then define the task in `active_reconstruction/__init__.py`.
+
+
+### Evaluation
+
+Please run the following command to evaluate the generalization performance of GenNBV.
+<b>Houses3K<\b> (50 unseen houses from batch 12)
+
+```
+python active_reconstruction/eval/eval_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=50 --stop_wandb=True
+```
 
 
 ## 📝 TODO List

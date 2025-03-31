@@ -2,23 +2,23 @@ import os
 import torch
 import numpy as np
 from collections import deque
-from gym.spaces import Box, Dict, MultiDiscrete
 from isaacgym import gymapi, gymtorch
 from isaacgym.torch_utils import *
-
+from active_reconstruction.env.recon_houses3k_gennbv import Recon_Houses3K_GenNBV
 from active_reconstruction.utils import scanned_pts_to_idx_3D, pose_coord_to_idx_3D, \
                                         grid_occupancy_tri_cls, bresenham3D_pycuda
 from torchvision.transforms.functional import rgb_to_grayscale
-from active_reconstruction.env.reconstruction_env import ReconstructionDroneEnv
+from scipy.spatial import cKDTree as KDTree
+from torchvision.transforms import ToPILImage
 from legged_gym import OPEN_ROBOT_ROOT_DIR
 
 
-class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
+class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
     env_to_obj = dict()
 
-    # training scenes from batch {1, 2, 3, 4, 5, 11}
-    num_obj = 256
-    num_obj_per_batch = 50
+    # evaluation scenes from batch 12
+    num_obj = 50
+    batch_idx = 12
 
     def _additional_create(self, env_handle, env_index):
         assert self.cfg.return_visual_observation, "visual observation should be returned!"
@@ -30,12 +30,7 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         # env_index: [0, num_env-1] -> obj_index: [0, num_obj-1]
         obj_index = env_index % self.num_obj
         self.env_to_obj[str(env_index)] = obj_index
-        batch_idx = obj_index // self.num_obj_per_batch + 1
-        urdf_idx = obj_index % self.num_obj_per_batch + 1
-        if batch_idx == 6:
-            batch_idx = 11  # skip 6-10
-
-        urdf_name = f"house_batch{batch_idx}_setA_{urdf_idx}.urdf"
+        urdf_name = f"house_batch{self.batch_idx}_setA_{obj_index+1}.urdf"
 
         asset_options = gymapi.AssetOptions()
         asset_options.flip_visual_attachments = self.cfg.asset.flip_visual_attachments
@@ -62,17 +57,21 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
 
         # [num_obj, X, Y, Z], num_obj == 256， X == Y == Z == 20
         grids_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                               "data_gennbv/houses3k/gt/houses3k_train_20_grid_gt.pt"), map_location=self.device)
+                                               "data_gennbv/houses3k/gt/houses3k_eval_20_grid_gt.pt"), map_location=self.device)
         self.grid_size = grids_gt.shape[1]
 
         # [num_obj, 3]
         voxel_size_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                                     "data_gennbv/houses3k/gt/houses3k_train_20_voxel_size_gt.pt"), map_location=self.device)
+                                                     "data_gennbv/houses3k/gt/houses3k_eval_20_voxel_size_gt.pt"), map_location=self.device)
         # [num_obj]
         num_valid_voxel_gt = grids_gt.sum(dim=(1, 2, 3))
         # [num_obj, 6]
         self.range_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                                "data_gennbv/houses3k/gt/houses3k_train_20_range_gt.pt"), map_location=self.device)
+                                                "data_gennbv/houses3k/gt/houses3k_eval_20_range_gt.pt"), map_location=self.device)
+
+        # list of []
+        self.layout_pc = [(torch.nonzero(grids_gt[idx]) / (self.grid_size - 1) * 2 - 1) * self.range_gt[idx, ::2]
+                          for idx in range(self.num_obj)]
 
         # num_obj -> num_env
         self.env_to_scene = []
@@ -87,9 +86,9 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
 
         # NOTE: collision checking, [num_obj, X, Y, Z], reso=128
         self.grids_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                               "data_gennbv/houses3k/gt/houses3k_train_128_grid_gt.pt"), map_location=self.device)
+                                               "data_gennbv/houses3k/gt/houses3k_eval_128_grid_gt.pt"), map_location=self.device)
         self.voxel_size_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
-                                               "data_gennbv/houses3k/gt/houses3k_train_128_voxel_size_gt.pt"), map_location=self.device)
+                                               "data_gennbv/houses3k/gt/houses3k_eval_128_voxel_size_gt.pt"), map_location=self.device)
 
         self.grids_gt_col_scenes = self.grids_gt_col[self.env_to_scene]
         self.voxel_size_gt_col_scenes = self.voxel_size_gt_col[self.env_to_scene]
@@ -200,7 +199,31 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         self.rgb_buf.extend(self.k * [torch.zeros((self.num_envs, 1, self.rgb_h, self.rgb_w), 
                                                   dtype=torch.float32, device=self.device)])
 
+        self.arange_envs = torch.arange(self.num_envs, device=self.device)
+
         self.pts_target_list = []
+
+        self.transforms_train_dict = dict()
+        camera_properties = self.get_camera_properties()
+        self.transforms_train_dict['h'] = self.cfg.visual_input.camera_height
+        self.transforms_train_dict['w'] = self.cfg.visual_input.camera_width
+        self.transforms_train_dict['camera_angle_x'] = camera_properties['horizontal_fov'] * np.pi / 180     # FOV, 90.0 degree -> 1.57
+        self.transforms_train_dict['frames'] = []
+        self.transform_normdepth2PIL = ToPILImage()
+
+
+        # evaluate on all envs
+        self.num_eval_round = 5
+        self.reset_num_count_round = torch.zeros(self.num_obj, dtype=torch.float32, device=self.device)    # count the number of finished rounds
+        self.reset_multi_round_cr = torch.zeros(self.num_obj, self.num_eval_round, dtype=torch.float32, device=self.device)
+        self.reset_multi_round_AUC = torch.zeros(self.num_obj, self.num_eval_round, self.max_episode_length, dtype=torch.float32, device=self.device)
+        # self.reset_multi_round_path_length = torch.zeros(self.num_obj, self.num_eval_round, dtype=torch.float32, device=self.device)
+        self.reset_multi_round_chamfer_dist = torch.zeros(self.num_obj, self.num_eval_round, dtype=torch.float32, device=self.device)
+        self.scanned_pc_coord = [[] for _ in range(self.num_envs)]
+        # self.scanned_pc_color = [[] for _ in range(self.num_envs)]
+
+        self.save_path = f'./active_reconstruction/scripts/video/eval_gennbv_houses3k'
+        os.makedirs(self.save_path, exist_ok=True)
 
     def reset(self):
         """ Initialization: Reset all robots"""
@@ -220,6 +243,8 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         return obs
 
     def step(self, actions):
+        if not torch.is_tensor(actions):
+            actions = torch.tensor(actions, device=self.device, dtype=torch.long)
         self.actions = torch.clip(actions, self.clip_pose_idx_low, self.clip_pose_idx_up)
 
         env_ids = [idx for idx in range(self.num_envs) if self.episode_length_buf[idx] == 0]
@@ -251,6 +276,11 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
                                             voxel_size_gt=self.voxel_size_gt_scenes,
                                             map_size=self.grid_size)
  
+        for idx in range(self.num_envs):
+            if len(pts_idx_all[idx]) == 0:
+                continue
+            self.scanned_pc_coord[idx].append(pts_target[idx])   # [num_point, 3]
+
         pose_idx_3D = pose_coord_to_idx_3D(poses=self.poses[:, :3].clone(),
                                                 range_gt=self.range_gt_scenes,
                                                 voxel_size_gt=self.voxel_size_gt_scenes,
@@ -303,51 +333,6 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
             max=1, min=0
         )
 
-    def post_process_camera_tensor(self):
-        """
-        First, post process the raw image and then stack along the time axis
-        """
-        rgb_images = torch.stack(self.rgb_cam_tensors)[..., :3].permute(0, 3, 1, 2) # [num_env, 3, H, W]
-        rgb_images = torch.nn.functional.interpolate(rgb_images, size=(self.rgb_h, self.rgb_w))
-        self.rgb_grayscale = rgb_to_grayscale(rgb_images).to(torch.float32)   # [num_env, 1, H, W]
-        assert self.rgb_h == rgb_images.shape[2], self.rgb_w == rgb_images.shape[3]
-
-        depth_images = torch.stack(self.depth_cam_tensors)
-        depth_images = torch.nan_to_num(depth_images, neginf=0)
-        depth_images = torch.clamp(depth_images, min=self.DEPTH_SENSE_DIST)     # depth min: -8
-        depth_images = abs(depth_images)
-        if not self.cfg.visual_input.normalization:
-            depth_images = depth_images * 255
-        self.depth_processed = depth_images # [num_env, H, W]
-
-        seg_images = torch.stack(self.seg_cam_tensors)
-        seg_images = torch.nan_to_num(seg_images, neginf=0)
-        if not self.cfg.visual_input.normalization:
-            seg_images = seg_images * 255
-        self.seg_processed = seg_images
-
-    def update_observation(self):
-        self.update_obs_buf()
-        self.update_occ_grid()
-
-    def post_physics_step(self, if_reset=False):
-        """ check terminations, compute observations and rewards
-            calls self._post_physics_step_callback() for common computations 
-            calls self._draw_debug_vis() if needed
-        """
-        self.gym.refresh_rigid_body_state_tensor(self.sim)
-        self.gym.refresh_actor_root_state_tensor(self.sim)
-        self.gym.refresh_net_contact_force_tensor(self.sim)
-
-        self.episode_length_buf += 1
-
-        obs, rewards, dones, infos = self.get_step_return()
-
-        if self.viewer and self.enable_viewer_sync and self.debug_viz:
-            self._draw_debug_vis()
-
-        return (obs, rewards, dones, infos) if not if_reset else obs
-
     def get_step_return(self):
         assert self.cfg.return_visual_observation, \
             "Images should be returned in this environment!"
@@ -371,7 +356,38 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
             "grid": self.occ_grids_tri_cls.view(self.num_envs, -1),
         }
 
-        env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
+        self.eval_all_envs_multi_round()
+
+        env_ids = self.reset_buf.nonzero().flatten()    # [num_env_ids], to be reset
+        env_ids_reset = self.arange_envs[self.reset_num_count_round[self.env_to_scene] == self.num_eval_round]
+        env_ids = torch.cat([env_ids, env_ids_reset], dim=0)     # [num_env_ids]
+        env_ids = torch.unique(env_ids, sorted=False)
+        for env_idx in env_ids:
+            scene_idx = self.env_to_scene[env_idx]
+            round_idx = int(self.reset_num_count_round[scene_idx].item())
+            if round_idx == self.num_eval_round:
+                continue
+
+            # NOTE: unit: cm
+            # self.reset_multi_round_chamfer_dist[scene_idx, round_idx] = 100 * chamfer_distance(scanned_pc_coord, \
+            #                                                                                  self.layout_pc[scene_idx].unsqueeze(0))[0]
+            
+            # if self.reset_multi_round_chamfer_dist[scene_idx, round_idx-1] == 0.:
+            if self.reset_multi_round_chamfer_dist[scene_idx, round_idx] == 0.:
+                scanned_pc_coord = torch.cat(self.scanned_pc_coord[env_idx], dim=0).unsqueeze(0)   # [N=1, num_point, 2]
+                scanned_kd_tree = KDTree(scanned_pc_coord[0].cpu().numpy())
+
+                # pcd = o3d.geometry.PointCloud()
+                # pcd.points = o3d.utility.Vector3dVector(torch.cat([self.layout_pc[scene_idx].cpu(), torch.zeros(self.layout_pc[scene_idx].shape[0], 1)], dim=1).numpy())
+                # o3d.io.write_point_cloud(f"{self.save_path}/scene_{scene_idx}_round_{round_idx}_gt.pcd", pcd)
+
+                # pcd_scanned = o3d.geometry.PointCloud()
+                # pcd_scanned.points = o3d.utility.Vector3dVector(torch.cat([scanned_pc_coord[0].cpu(), torch.zeros(scanned_pc_coord[0].shape[0], 1)], dim=1).numpy())
+                # o3d.io.write_point_cloud(f"{self.save_path}/scene_{scene_idx}_round_{round_idx}_scanned.pcd", pcd_scanned)
+
+                distance, _ = scanned_kd_tree.query(self.layout_pc[scene_idx].cpu().numpy())
+                self.reset_multi_round_chamfer_dist[scene_idx, round_idx] = 100 * np.mean(distance)
+
         self.reset_idx(env_ids)
 
         rewards, dones, infos = self.rew_buf, self.reset_buf.clone(), self.extras
@@ -379,29 +395,6 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         self.reset_buf[env_ids] = 0
 
         return obs, rewards, dones, infos
-
-    def _reset_root_states(self, env_ids):
-        """ Resets the root states of agents in envs to be reseted
-        Args:
-            env_ids (List[int]): Environemnt ids
-        """
-        if self.custom_origins:
-            self.root_states[::self.skip][env_ids] = self.base_init_state
-            self.root_states[::self.skip][env_ids, :3] += self.env_origins[env_ids]
-            self.root_states[::self.skip][env_ids, :2] += torch_rand_float(
-                -1., 1., (len(env_ids), 2), device=self.device
-            )  # xy position within 1m of the center
-        else:   # <-
-            self.root_states[::self.skip][env_ids] = self.base_init_state
-            self.root_states[::self.skip][env_ids, :3] += self.env_origins[env_ids]
-
-        env_ids_int32 = env_ids.clone().to(dtype=torch.int32) * self.skip
-        self.gym.set_actor_root_state_tensor_indexed(
-            self.sim,
-            gymtorch.unwrap_tensor(self.root_states),
-            gymtorch.unwrap_tensor(env_ids_int32),
-            len(env_ids_int32)
-        )
 
     def reset_idx(self, env_ids):
         """ Reset some environments.
@@ -432,6 +425,10 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         if self.buffer_size == 1:
             self.reward_ratio_buf[1][env_ids] = torch.zeros(self.num_envs, device=self.device)[env_ids]
 
+        # Reset scanned point cloud
+        for env_idx in env_ids:
+            self.scanned_pc_coord[env_idx] = []
+
         # Reset actions
         self.actions[env_ids] = torch.tensor(self.cfg.normalization.init_action,
                                             device=device).repeat(len(env_ids), 1)
@@ -460,41 +457,46 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         if self.cfg.env.send_timeouts:
             self.extras["time_outs"] = self.time_out_buf
 
-    def update_observation_space(self):
-        """ update observation and action space
-        """
-        if not self.cfg.return_visual_observation:
-            return
+    def eval_all_envs_multi_round(self):
+        """ Evaluate on all envs + average CR over 10 rounds. """
+        # save_path_occ = os.path.join(self.save_path, "all_2D_occ_map_local")
+        # os.makedirs(save_path_occ, exist_ok=True)
 
-        # action space: discrete
-        action_space_size = (self.clip_pose_idx_up - self.clip_pose_idx_low + 1).cpu().numpy()  # [6]
-        self.action_space = MultiDiscrete(nvec=torch.Size(action_space_size))
+        for env_idx in range(self.num_envs):
+            scene_idx = self.env_to_scene[env_idx]
+            if self.reset_num_count_round[scene_idx] == self.num_eval_round or self.cur_episode_length[env_idx] == 0:
+                continue
 
-        # observation space
-        x_max = self.range_gt[:, 0].max().item()
-        x_min = self.range_gt[:, 1].min().item()
-        y_max = self.range_gt[:, 2].max().item()
-        y_min = self.range_gt[:, 3].min().item()
-        z_max = self.range_gt[:, 4].max().item()
-        z_min = self.range_gt[:, 5].min().item()
+            round_idx = int(self.reset_num_count_round[scene_idx].item())
+            if self.reset_buf[env_idx] and round_idx < self.num_eval_round:
+                self.reset_multi_round_cr[scene_idx, round_idx] = self.reward_ratio_buf[-1][env_idx]
+                # self.reset_multi_round_path_length[scene_idx, round_idx] = self.episode_length_buf[env_idx]
 
-        clip_pose_world_up = [x_max, y_max, z_max, 0, 1/2*np.pi, 2*np.pi]
-        clip_pose_world_low = [x_min, y_min, z_min, 0, -1/2*np.pi, 0]
+                self.reset_num_count_round[scene_idx] += 1
+                pass
 
-        pose_up_bound = np.tile(clip_pose_world_up, self.buffer_size).astype(np.float32)
-        pose_low_bound = np.tile(clip_pose_world_low, self.buffer_size).astype(np.float32)
+        process = self.reset_num_count_round.sum()
+        print(process)
+        if process == self.num_obj * self.num_eval_round:
+            torch.save(self.reset_multi_round_cr, os.path.join(self.save_path, "reset_multi_round_cr.pt"))  # [num_env, num_round]
+            # torch.save(self.reset_multi_round_path_length, os.path.join(self.save_path, "reset_multi_round_path_length.pt"))    # [num_env, num_round]
+            torch.save(self.reset_multi_round_chamfer_dist, os.path.join(self.save_path, "reset_multi_round_chamfer_dist.pt"))  # [num_env, num_round]
+            torch.save(self.reset_multi_round_AUC, os.path.join(self.save_path, "reset_multi_round_AUC.pt"))    # [num_env, num_round, max_episode_length=50]
 
-        self.observation_space = Dict(
-            {
-                "state": Box(low=pose_low_bound, high=pose_up_bound, 
-                             shape=(self.buffer_size * self.action_size, ), dtype=np.int64),
-                "state_rgb": Box(low=0, high=255, 
-                                 shape=(self.k * self.rgb_h * self.rgb_w, ), dtype=np.int64),
-                "grid": Box(low=-torch.inf, high=torch.inf, 
-                            shape=(self.grid_size, self.grid_size, self.grid_size), dtype=np.float32),
-            }
-        )
-        pass
+            # print("All CR: ", self.reset_multi_round_cr)
+            print("*"*50)
+            mean_auc = torch.zeros(self.num_obj, self.num_eval_round, dtype=torch.float32, device=self.device)
+            for step_idx in range(self.max_episode_length):
+                mean_auc += self.reset_multi_round_AUC[:, :, step_idx] * (self.max_episode_length - step_idx)
+            mean_auc /= self.max_episode_length
+            print("[AUC] Average All: ", mean_auc.mean(dim=(0,1)))
+            print("*"*50)
+            print("[CR] Average All: ", self.reset_multi_round_cr.mean(dim=(0,1)))
+            print("*"*50)
+            print("[Comp.] Average All: ", self.reset_multi_round_chamfer_dist.mean(dim=(0,1)))
+            print("*"*50)
+            print("Done")
+            exit()
 
     def check_collsion_3D(self):
         """ check collision in motion, including rigid body collision and local planning collision"""
@@ -583,10 +585,17 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         """ Reward for exploring the surface coverage of scenes."""
         layout_coverage = self.scanned_gt_grid.sum(dim=(1, 2, 3)) / self.num_valid_voxel_gt_scenes
         self.reward_ratio_buf.extend([layout_coverage.clone()])
-        return self.reward_ratio_buf[-1] - self.reward_ratio_buf[-2]
 
-    def _reward_short_path(self):
-        """ Penalty for current episode_length """
-        current_length = self.episode_length_buf.clone()
-        extra_step = torch.clip(current_length - 30, min=0, max=2)  # reward is computed cumulatively
-        return -extra_step  # penalize
+        rew_coverage = self.reward_ratio_buf[-1] - self.reward_ratio_buf[-2]
+
+        env_ids = torch.arange(self.num_envs, device=self.device)
+        scene_ids = self.env_to_scene[env_ids]
+        round_ids = self.reset_num_count_round[scene_ids].long()
+        mask_round = round_ids < self.num_eval_round
+
+        scene_ids = scene_ids[mask_round]
+        env_ids = env_ids[mask_round]
+        round_ids = round_ids[mask_round]
+        self.reset_multi_round_AUC[scene_ids, round_ids, self.cur_episode_length[env_ids].long()] = rew_coverage[mask_round].clone()
+
+        return rew_coverage
