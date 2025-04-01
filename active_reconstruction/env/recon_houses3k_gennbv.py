@@ -60,7 +60,7 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
     def _init_load_all(self):
         """ load all ground truth """
 
-        # [num_obj, X, Y, Z], num_obj == 256， X == Y == Z == 20
+        # [num_obj, X, Y, Z], num_obj=256， X=Y=Z=20
         grids_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
                                                "data_gennbv/houses3k/gt/houses3k_train_20_grid_gt.pt"), map_location=self.device)
         self.grid_size = grids_gt.shape[1]
@@ -85,17 +85,15 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         self.num_valid_voxel_gt_scenes = num_valid_voxel_gt[self.env_to_scene]
         self.grids_gt_scenes = grids_gt[self.env_to_scene]
 
-        # NOTE: collision checking, [num_obj, X, Y, Z], reso=128
-        self.grids_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
+        # [num_obj, X, Y, Z], X=Y=Z=128, for collision checking
+        grids_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
                                                "data_gennbv/houses3k/gt/houses3k_train_128_grid_gt.pt"), map_location=self.device)
-        self.voxel_size_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
+        # [num_obj, 3], for collision checking
+        voxel_size_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
                                                "data_gennbv/houses3k/gt/houses3k_train_128_voxel_size_gt.pt"), map_location=self.device)
 
-        self.grids_gt_col_scenes = self.grids_gt_col[self.env_to_scene]
-        self.voxel_size_gt_col_scenes = self.voxel_size_gt_col[self.env_to_scene]
-
-        del self.grids_gt_col
-        del self.voxel_size_gt_col
+        self.grids_gt_col_scenes = grids_gt_col[self.env_to_scene]
+        self.voxel_size_gt_col_scenes = voxel_size_gt_col[self.env_to_scene]
 
         print("Loaded all ground truth data.")
 
@@ -152,7 +150,7 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         self.pose_buf.extend(self.buffer_size * [pose_buf])
 
         # NOTE: reward functions
-        self.ratio_threshold_term = 0.99  # TODO
+        self.ratio_threshold_term = 0.99
         self.reward_ratio_buf = deque(maxlen=max(self.buffer_size, 2))   # surface coverage ratip
         self.reward_ratio_buf.extend(max(self.buffer_size, 2) * [torch.zeros(self.num_envs, device=self.device)])
         self.collision_buf = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
@@ -494,26 +492,26 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
                             shape=(self.grid_size, self.grid_size, self.grid_size), dtype=np.float32),
             }
         )
-        pass
 
     def check_collsion_3D(self):
-        """ check collision in motion, including rigid body collision and local planning collision"""
+        """ Check 3D collision. 
+        We use occupancy collision to replace rigid body collision 
+        because we found Isaac Gym cannot correctly support correct convex decomposition
+        for complex collision meshes. """
 
-        # collision by rigid body (occupancy)
-        collision_rigid = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
-        self.collision_flag = collision_rigid
+        # # collision by rigid body (occupancy)
+        # collision_rigid = torch.any(torch.norm(self.contact_forces[:,\
+        #                                     self.termination_contact_indices, :], dim=-1) > 1., dim=1)
+        # self.collision_flag = collision_rigid
 
-        # self.collision_flag = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        # collision by occupancy
+        self.collision_flag = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         cur_pose_idx = self.poses_idx_col.to(torch.long)
         no_collision_flag = cur_pose_idx.sum(dim=1) == -3    # no collision
         for env_idx in range(self.num_envs):
-            if no_collision_flag[env_idx]:
-                continue
-            else:
+            if not no_collision_flag[env_idx]:
                 self.collision_flag[env_idx] = self.grids_gt_col_scenes[env_idx, cur_pose_idx[env_idx, 0], \
                     cur_pose_idx[env_idx, 1], cur_pose_idx[env_idx, 2]] == 1.0
-
-        pass
 
     def check_termination(self):
         """ Check if environments need to be reset

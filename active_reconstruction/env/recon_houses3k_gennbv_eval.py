@@ -55,7 +55,7 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
     def _init_load_all(self):
         """ load all ground truth """
 
-        # [num_obj, X, Y, Z], num_obj == 256， X == Y == Z == 20
+        # [num_obj, X, Y, Z], num_obj=256， X=Y=Z=20
         grids_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
                                                "data_gennbv/houses3k/gt/houses3k_eval_20_grid_gt.pt"), map_location=self.device)
         self.grid_size = grids_gt.shape[1]
@@ -69,7 +69,7 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
         self.range_gt = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
                                                 "data_gennbv/houses3k/gt/houses3k_eval_20_range_gt.pt"), map_location=self.device)
 
-        # list of []
+        # list of gt point cloud
         self.layout_pc = [(torch.nonzero(grids_gt[idx]) / (self.grid_size - 1) * 2 - 1) * self.range_gt[idx, ::2]
                           for idx in range(self.num_obj)]
 
@@ -84,17 +84,15 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
         self.num_valid_voxel_gt_scenes = num_valid_voxel_gt[self.env_to_scene]
         self.grids_gt_scenes = grids_gt[self.env_to_scene]
 
-        # NOTE: collision checking, [num_obj, X, Y, Z], reso=128
-        self.grids_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
+        # [num_obj, X, Y, Z], X=Y=Z=128, for collision checking
+        grids_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
                                                "data_gennbv/houses3k/gt/houses3k_eval_128_grid_gt.pt"), map_location=self.device)
-        self.voxel_size_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
+        # [num_obj, 3], for collision checking
+        voxel_size_gt_col = torch.load(os.path.join(OPEN_ROBOT_ROOT_DIR,
                                                "data_gennbv/houses3k/gt/houses3k_eval_128_voxel_size_gt.pt"), map_location=self.device)
 
-        self.grids_gt_col_scenes = self.grids_gt_col[self.env_to_scene]
-        self.voxel_size_gt_col_scenes = self.voxel_size_gt_col[self.env_to_scene]
-
-        del self.grids_gt_col
-        del self.voxel_size_gt_col
+        self.grids_gt_col_scenes = grids_gt_col[self.env_to_scene]
+        self.voxel_size_gt_col_scenes = voxel_size_gt_col[self.env_to_scene]
 
         print("Loaded all ground truth data.")
 
@@ -151,7 +149,7 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
         self.pose_buf.extend(self.buffer_size * [pose_buf])
 
         # NOTE: reward functions
-        self.ratio_threshold_term = 0.99  # TODO
+        self.ratio_threshold_term = 0.99
         self.reward_ratio_buf = deque(maxlen=max(self.buffer_size, 2))   # surface coverage ratip
         self.reward_ratio_buf.extend(max(self.buffer_size, 2) * [torch.zeros(self.num_envs, device=self.device)])
         self.collision_buf = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
@@ -217,7 +215,6 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
         self.reset_num_count_round = torch.zeros(self.num_obj, dtype=torch.float32, device=self.device)    # count the number of finished rounds
         self.reset_multi_round_cr = torch.zeros(self.num_obj, self.num_eval_round, dtype=torch.float32, device=self.device)
         self.reset_multi_round_AUC = torch.zeros(self.num_obj, self.num_eval_round, self.max_episode_length, dtype=torch.float32, device=self.device)
-        # self.reset_multi_round_path_length = torch.zeros(self.num_obj, self.num_eval_round, dtype=torch.float32, device=self.device)
         self.reset_multi_round_chamfer_dist = torch.zeros(self.num_obj, self.num_eval_round, dtype=torch.float32, device=self.device)
         self.scanned_pc_coord = [[] for _ in range(self.num_envs)]
         # self.scanned_pc_color = [[] for _ in range(self.num_envs)]
@@ -365,15 +362,10 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
         for env_idx in env_ids:
             scene_idx = self.env_to_scene[env_idx]
             round_idx = int(self.reset_num_count_round[scene_idx].item())
-            if round_idx == self.num_eval_round:
-                continue
+            # if round_idx == self.num_eval_round:
+            #     continue
 
-            # NOTE: unit: cm
-            # self.reset_multi_round_chamfer_dist[scene_idx, round_idx] = 100 * chamfer_distance(scanned_pc_coord, \
-            #                                                                                  self.layout_pc[scene_idx].unsqueeze(0))[0]
-            
-            # if self.reset_multi_round_chamfer_dist[scene_idx, round_idx-1] == 0.:
-            if self.reset_multi_round_chamfer_dist[scene_idx, round_idx] == 0.:
+            if self.reset_multi_round_chamfer_dist[scene_idx, round_idx-1] == 0.:
                 scanned_pc_coord = torch.cat(self.scanned_pc_coord[env_idx], dim=0).unsqueeze(0)   # [N=1, num_point, 2]
                 scanned_kd_tree = KDTree(scanned_pc_coord[0].cpu().numpy())
 
@@ -386,7 +378,7 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
                 # o3d.io.write_point_cloud(f"{self.save_path}/scene_{scene_idx}_round_{round_idx}_scanned.pcd", pcd_scanned)
 
                 distance, _ = scanned_kd_tree.query(self.layout_pc[scene_idx].cpu().numpy())
-                self.reset_multi_round_chamfer_dist[scene_idx, round_idx] = 100 * np.mean(distance)
+                self.reset_multi_round_chamfer_dist[scene_idx, round_idx-1] = 100 * np.mean(distance)
 
         self.reset_idx(env_ids)
 
@@ -459,27 +451,21 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
 
     def eval_all_envs_multi_round(self):
         """ Evaluate on all envs + average CR over 10 rounds. """
-        # save_path_occ = os.path.join(self.save_path, "all_2D_occ_map_local")
-        # os.makedirs(save_path_occ, exist_ok=True)
-
         for env_idx in range(self.num_envs):
             scene_idx = self.env_to_scene[env_idx]
-            if self.reset_num_count_round[scene_idx] == self.num_eval_round or self.cur_episode_length[env_idx] == 0:
+            round_idx = int(self.reset_num_count_round[scene_idx].item())
+            if self.reset_num_count_round[scene_idx] == self.num_eval_round or self.cur_episode_length[env_idx] == 0 or \
+                round_idx >= self.num_eval_round or self.reset_buf[env_idx] == 0:
                 continue
 
-            round_idx = int(self.reset_num_count_round[scene_idx].item())
-            if self.reset_buf[env_idx] and round_idx < self.num_eval_round:
-                self.reset_multi_round_cr[scene_idx, round_idx] = self.reward_ratio_buf[-1][env_idx]
-                # self.reset_multi_round_path_length[scene_idx, round_idx] = self.episode_length_buf[env_idx]
-
-                self.reset_num_count_round[scene_idx] += 1
-                pass
+            self.reset_multi_round_cr[scene_idx, round_idx] = self.reward_ratio_buf[-1][env_idx]
+            self.reset_num_count_round[scene_idx] += 1
 
         process = self.reset_num_count_round.sum()
-        print(process)
+        print(int(process.item()))
+
         if process == self.num_obj * self.num_eval_round:
             torch.save(self.reset_multi_round_cr, os.path.join(self.save_path, "reset_multi_round_cr.pt"))  # [num_env, num_round]
-            # torch.save(self.reset_multi_round_path_length, os.path.join(self.save_path, "reset_multi_round_path_length.pt"))    # [num_env, num_round]
             torch.save(self.reset_multi_round_chamfer_dist, os.path.join(self.save_path, "reset_multi_round_chamfer_dist.pt"))  # [num_env, num_round]
             torch.save(self.reset_multi_round_AUC, os.path.join(self.save_path, "reset_multi_round_AUC.pt"))    # [num_env, num_round, max_episode_length=50]
 
@@ -499,23 +485,24 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
             exit()
 
     def check_collsion_3D(self):
-        """ check collision in motion, including rigid body collision and local planning collision"""
+        """ Check 3D collision. 
+        We use occupancy collision to replace rigid body collision 
+        because we found Isaac Gym cannot correctly support correct convex decomposition
+        for complex collision meshes. """
 
-        # collision by rigid body (occupancy)
-        collision_rigid = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
-        self.collision_flag = collision_rigid
+        # # collision by rigid body (occupancy)
+        # collision_rigid = torch.any(torch.norm(self.contact_forces[:,\
+        #                                     self.termination_contact_indices, :], dim=-1) > 1., dim=1)
+        # self.collision_flag = collision_rigid
 
-        # self.collision_flag = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        # collision by occupancy
+        self.collision_flag = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         cur_pose_idx = self.poses_idx_col.to(torch.long)
         no_collision_flag = cur_pose_idx.sum(dim=1) == -3    # no collision
         for env_idx in range(self.num_envs):
-            if no_collision_flag[env_idx]:
-                continue
-            else:
+            if not no_collision_flag[env_idx]:
                 self.collision_flag[env_idx] = self.grids_gt_col_scenes[env_idx, cur_pose_idx[env_idx, 0], \
                     cur_pose_idx[env_idx, 1], cur_pose_idx[env_idx, 2]] == 1.0
-
-        pass
 
     def check_termination(self):
         """ Check if environments need to be reset
