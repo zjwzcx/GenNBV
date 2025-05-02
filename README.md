@@ -108,7 +108,7 @@ Please run the following command to reproduce the training setting of GenNBV:
 python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --stop_wandb --headless
 ```
 
-[Weights & Bias](https://wandb.ai/site/) (wandb) is highly recommended to analyze the training logs. If you want to use wandb in our codebase, please paste your wandb API key into `wandb_utils/wandb_api_key_file.txt`. And then you need to run the following command to launch training:
+[Weights & Bias](https://wandb.ai/site/) (wandb) is highly recommended for analyzing the training logs. If you want to use wandb in our codebase, please paste your wandb API key into `wandb_utils/wandb_api_key_file.txt`. And then you need to run the following command to launch training:
 
 ```
 python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --headless
@@ -116,7 +116,7 @@ python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 
 
 ### Customized Training Environments
 
-If you want customize a novel training environment, you need to create your environment and configuration files in `active_reconstruction/env` and then define the task in `active_reconstruction/__init__.py`.
+If you want to customize a novel training environment, you need to create your environment and configuration files in `active_reconstruction/env` and then define the task in `active_reconstruction/__init__.py`.
 
 
 ### Evaluation
