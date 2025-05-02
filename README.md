@@ -122,7 +122,8 @@ If you want to customize a novel training environment, you need to create your e
 ### Evaluation
 
 Please run the following command to evaluate the generalization performance of GenNBV.
-<b>Houses3K<\b> (50 unseen houses from batch 12)
+
+**Houses3K** (50 unseen houses from batch 12)
 
 ```
 python active_reconstruction/eval/eval_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=50 --stop_wandb=True
@@ -132,7 +133,7 @@ python active_reconstruction/eval/eval_gennbv_houses3k.py --sim_device=cuda:0 --
 ## 📝 TODO List
 - \[x\] Release the paper and training code.
 - \[x\] Release preprocessed dataset.
-- \[ \] Release the evaluation scripts.
+- \[x\] Release the evaluation scripts.
 
 ## 📦 Model and Benchmark
 ### Model Overview
