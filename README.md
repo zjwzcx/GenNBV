@@ -24,6 +24,10 @@
 
 </div>
 
+> [!TIP]
+> Our follow-up work for generalizable indoor active mapping can be found in https://github.com/zjwzcx/GLEAM.
+
+
 ## 📋 Contents
 1. [About](#-about)
 2. [Getting Started](#-getting-started)
