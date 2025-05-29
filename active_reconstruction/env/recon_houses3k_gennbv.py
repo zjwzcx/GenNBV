@@ -248,12 +248,14 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
                                             range_gt=self.range_gt_scenes,
                                             voxel_size_gt=self.voxel_size_gt_scenes,
                                             map_size=self.grid_size)
- 
+
         pose_idx_3D = pose_coord_to_idx_3D(poses=self.poses[:, :3].clone(),
                                                 range_gt=self.range_gt_scenes,
                                                 voxel_size_gt=self.voxel_size_gt_scenes,
                                                 map_size=self.grid_size)
-        pose_idx_3D_col = pose_coord_to_idx_3D(poses=self.poses[:, :3].clone(), # just for collision checking
+
+        # just for collision checking
+        pose_idx_3D_col = pose_coord_to_idx_3D(poses=self.poses[:, :3].clone(),
                                                 range_gt=self.range_gt_scenes,
                                                 voxel_size_gt=self.voxel_size_gt_col_scenes,
                                                 map_size=128,
@@ -377,29 +379,6 @@ class Recon_Houses3K_GenNBV(ReconstructionDroneEnv):
         self.reset_buf[env_ids] = 0
 
         return obs, rewards, dones, infos
-
-    def _reset_root_states(self, env_ids):
-        """ Resets the root states of agents in envs to be reseted
-        Args:
-            env_ids (List[int]): Environemnt ids
-        """
-        if self.custom_origins:
-            self.root_states[::self.skip][env_ids] = self.base_init_state
-            self.root_states[::self.skip][env_ids, :3] += self.env_origins[env_ids]
-            self.root_states[::self.skip][env_ids, :2] += torch_rand_float(
-                -1., 1., (len(env_ids), 2), device=self.device
-            )  # xy position within 1m of the center
-        else:   # <-
-            self.root_states[::self.skip][env_ids] = self.base_init_state
-            self.root_states[::self.skip][env_ids, :3] += self.env_origins[env_ids]
-
-        env_ids_int32 = env_ids.clone().to(dtype=torch.int32) * self.skip
-        self.gym.set_actor_root_state_tensor_indexed(
-            self.sim,
-            gymtorch.unwrap_tensor(self.root_states),
-            gymtorch.unwrap_tensor(env_ids_int32),
-            len(env_ids_int32)
-        )
 
     def reset_idx(self, env_ids):
         """ Reset some environments.

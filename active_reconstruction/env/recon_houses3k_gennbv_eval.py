@@ -40,8 +40,8 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
 
         pose = gymapi.Transform()
         pose.p = gymapi.Vec3(self.env_origins[env_index][0],
-                                self.env_origins[env_index][1],
-                                self.env_origins[env_index][2])  # place the box at center point
+                            self.env_origins[env_index][1],
+                            self.env_origins[env_index][2])  # place the box at center point
         pose.r = gymapi.Quat(0, 0, 0, 1)
 
         ahandle = self.gym.create_actor(env_handle, asset, pose, None, env_index, 0)
@@ -197,10 +197,9 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
         self.rgb_buf.extend(self.k * [torch.zeros((self.num_envs, 1, self.rgb_h, self.rgb_w), 
                                                   dtype=torch.float32, device=self.device)])
 
-        self.arange_envs = torch.arange(self.num_envs, device=self.device)
-
         self.pts_target_list = []
 
+        # evaluation json file
         self.transforms_train_dict = dict()
         camera_properties = self.get_camera_properties()
         self.transforms_train_dict['h'] = self.cfg.visual_input.camera_height
@@ -218,6 +217,7 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
         self.reset_multi_round_chamfer_dist = torch.zeros(self.num_obj, self.num_eval_round, dtype=torch.float32, device=self.device)
         self.scanned_pc_coord = [[] for _ in range(self.num_envs)]
         # self.scanned_pc_color = [[] for _ in range(self.num_envs)]
+        self.arange_envs = torch.arange(self.num_envs, device=self.device)
 
         self.save_path = f'./active_reconstruction/scripts/video/eval_gennbv_houses3k'
         os.makedirs(self.save_path, exist_ok=True)
@@ -282,7 +282,9 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
                                                 range_gt=self.range_gt_scenes,
                                                 voxel_size_gt=self.voxel_size_gt_scenes,
                                                 map_size=self.grid_size)
-        pose_idx_3D_col = pose_coord_to_idx_3D(poses=self.poses[:, :3].clone(), # just for collision checking
+
+        # just for collision checking
+        pose_idx_3D_col = pose_coord_to_idx_3D(poses=self.poses[:, :3].clone(),
                                                 range_gt=self.range_gt_scenes,
                                                 voxel_size_gt=self.voxel_size_gt_col_scenes,
                                                 map_size=128,
@@ -329,6 +331,24 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
             self.scanned_gt_grid + occ_grids * self.grids_gt_scenes,
             max=1, min=0
         )
+
+    def post_physics_step(self, if_reset=False):
+        """ check terminations, compute observations and rewards
+            calls self._post_physics_step_callback() for common computations 
+            calls self._draw_debug_vis() if needed
+        """
+        # self.gym.refresh_rigid_body_state_tensor(self.sim)
+        self.gym.refresh_actor_root_state_tensor(self.sim)
+        self.gym.refresh_net_contact_force_tensor(self.sim)
+
+        self.episode_length_buf += 1
+
+        obs, rewards, dones, infos = self.get_step_return()
+
+        if self.viewer and self.enable_viewer_sync and self.debug_viz:
+            self._draw_debug_vis()
+
+        return (obs, rewards, dones, infos) if not if_reset else obs
 
     def get_step_return(self):
         assert self.cfg.return_visual_observation, \
@@ -462,12 +482,18 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
             self.reset_num_count_round[scene_idx] += 1
 
         process = self.reset_num_count_round.sum()
-        print(int(process.item()))
+        # print(int(process.item()))
 
         if process == self.num_obj * self.num_eval_round:
-            torch.save(self.reset_multi_round_cr, os.path.join(self.save_path, "reset_multi_round_cr.pt"))  # [num_env, num_round]
-            torch.save(self.reset_multi_round_chamfer_dist, os.path.join(self.save_path, "reset_multi_round_chamfer_dist.pt"))  # [num_env, num_round]
-            torch.save(self.reset_multi_round_AUC, os.path.join(self.save_path, "reset_multi_round_AUC.pt"))    # [num_env, num_round, max_episode_length=50]
+            # [num_env, num_round]
+            torch.save(self.reset_multi_round_cr, 
+                       os.path.join(self.save_path, "reset_multi_round_cr.pt"))
+            # [num_env, num_round]
+            torch.save(self.reset_multi_round_chamfer_dist, 
+                       os.path.join(self.save_path, "reset_multi_round_chamfer_dist.pt"))
+            # [num_env, num_round, max_episode_length=30]
+            torch.save(self.reset_multi_round_AUC, 
+                       os.path.join(self.save_path, "reset_multi_round_AUC.pt"))
 
             # print("All CR: ", self.reset_multi_round_cr)
             print("*"*50)
@@ -490,7 +516,7 @@ class Recon_Houses3K_GenNBV_Eval(Recon_Houses3K_GenNBV):
         because we found Isaac Gym cannot correctly support correct convex decomposition
         for complex collision meshes. """
 
-        # # collision by rigid body (occupancy)
+        # # collision by rigid body
         # collision_rigid = torch.any(torch.norm(self.contact_forces[:,\
         #                                     self.termination_contact_indices, :], dim=-1) > 1., dim=1)
         # self.collision_flag = collision_rigid
