@@ -18,9 +18,9 @@
 
 <div id="top" align="center">
 
-[![arXiv](https://img.shields.io/badge/arXiv-2402.16174-blue)](https://arxiv.org/abs/2402.16174)
+[![arXiv](https://img.shields.io/badge/arXiv-2402.16174-A42C25)](https://arxiv.org/abs/2402.16174)
 [![](https://img.shields.io/badge/Paper-%F0%9F%93%96-blue)](./assets/2024_CVPR_GenNBV.pdf)
-[![](https://img.shields.io/badge/Project-%F0%9F%9A%80-blue)](https://gennbv.tech/)
+[![](https://img.shields.io/badge/Project-%F0%9F%9A%80-FE7A16)](https://gennbv.tech/)
 
 </div>
 
@@ -88,7 +88,7 @@ pip install -e .
 ### Data Preparation
 
 <!-- Please refer to the [guide](data/README.md) for downloading and organization. -->
-We provide all the preprocessed data used in our work, including mesh files and ground-truth surface points. We recommend users download the data from our provided Google Drive link [[HERE](https://drive.google.com/drive/folders/1SUcDy8hwluEBpTtKZ3_83ySKnLlsZ4hi?usp=sharing)].
+We provide all the preprocessed data used in our work, including mesh files and ground-truth surface points. We recommend users download the data from our provided Google Drive link [[HERE](https://drive.google.com/drive/folders/198SkXwOWhyjSoA593YdPW6248mgss6N3?usp=sharing)].
 
 The directory structure should be as follows.
 
