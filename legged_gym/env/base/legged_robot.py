@@ -62,7 +62,6 @@ class LeggedRobot(BaseTask):
         self.cfg = cfg
         self.sim_params = sim_params
         self.height_samples = None
-        from legged_complex_env.env.env_config import LeggedVisualInputConfig
         if hasattr(cfg, "return_visual_observation"):
             self.debug_viz = cfg.debug_viz
         else:
@@ -607,7 +606,7 @@ class LeggedRobot(BaseTask):
             [self.obs_scales.lin_vel, self.obs_scales.lin_vel, self.obs_scales.ang_vel],
             device=self.device,
             requires_grad=False,
-        )
+        )  # TODO change this
         self.feet_air_time = torch.zeros(
             self.num_envs, self.feet_indices.shape[0], dtype=torch.float, device=self.device, requires_grad=False
         )

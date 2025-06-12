@@ -463,6 +463,8 @@ def obs_as_tensor(obs: Union[np.ndarray, Dict[Union[str, int], np.ndarray]],
         return obs
     elif isinstance(obs, tuple) and len(obs) == 4:    # cross-dataset evaluation (only eval)
         return obs[0]
+    elif isinstance(obs, tuple) and len(obs) == 5:    # cross-dataset evaluation (only eval), accuracy metric
+        return obs[0]
     else:
         raise Exception(f"Unrecognized type of observation {type(obs)}")
 

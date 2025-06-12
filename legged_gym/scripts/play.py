@@ -121,7 +121,6 @@ def play(args):
 
 
 if __name__ == '__main__':
-    import legged_complex_env
     EXPORT_POLICY = True
     RECORD_FRAMES = False
     MOVE_CAMERA = False

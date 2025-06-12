@@ -52,10 +52,9 @@ We test our codes under the following environment:
 
 - Ubuntu 20.04
 - NVIDIA Driver: 545.29.02
-- CUDA 11.3
+- CUDA 11.7
 - Python 3.8.12
-- PyTorch 1.11.0+cu113
-<!-- - PyTorch3D 0.7.5 -->
+- Torch 1.13.1+cu117
 
 1. Clone this repository.
 
@@ -69,7 +68,7 @@ cd GenNBV
 ```bash
 conda create -n gennbv python=3.8 -y
 conda activate gennbv
-pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
+pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
 ```
 
 3. NVIDIA Isaac Gym Installation: https://developer.nvidia.com/isaac-gym/download
@@ -78,12 +77,21 @@ cd isaacgym/python
 pip install -e .
 ```
 
-4. Install GenNBV.
+4. Install PyTorch3D.
+```
+# Version 0.7.8 works
+git clone https://github.com/facebookresearch/pytorch3d.git
+cd pytorch3d
+pip install -e .
+```
+
+5. Install GenNBV.
 
 ```
 pip install -r requirements.txt
 pip install -e .
 ```
+ 
 
 ### Data Preparation
 
@@ -94,7 +102,10 @@ The directory structure should be as follows.
 
 ```
 gennbv
-├── active_reconstruction
+├── gennbv
+│   ├── env
+│   ├── train
+│   ├── ...
 ├── data_gennbv
 │   ├── houses3k
 │   │   ├── gt
@@ -104,34 +115,28 @@ gennbv
 │   ├── ...
 ```
 
-### Training
+## 🕹️ Training & Evaluation
 
-Please run the following command to reproduce the training setting of GenNBV:
+[Weights & Bias](https://wandb.ai/site/) (wandb) is highly recommended for analyzing the training logs. If you want to use wandb in our codebase, please paste your wandb API key into `wandb_utils/wandb_api_key_file.txt`. If you don't want to use wandb, please add `--stop_wandb` into the following command.
 
+
+### Training & Evaluation
+
+Please run the following command to reproduce the standard training and evaluation of GenNBV (need ~25GB VRAM):
 ```
-python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --stop_wandb --headless
+python gennbv/train/train_eval_gennbv.py --sim_device=cuda:0 --num_envs=256 --headless
 ```
 
-[Weights & Bias](https://wandb.ai/site/) (wandb) is highly recommended for analyzing the training logs. If you want to use wandb in our codebase, please paste your wandb API key into `wandb_utils/wandb_api_key_file.txt`. And then you need to run the following command to launch training:
+Training-only (need <20GB VRAM):
+```
+python gennbv/train/train_gennbv.py --sim_device=cuda:0 --num_envs=256 --headless
+```
 
-```
-python active_reconstruction/train/train_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=256 --headless
-```
 
 ### Customized Training Environments
 
-If you want to customize a novel training environment, you need to create your environment and configuration files in `active_reconstruction/env` and then define the task in `active_reconstruction/__init__.py`.
+If you want to customize a novel training environment, you need to create your environment and configuration files in `gennbv/env` and then define the task in `gennbv/__init__.py`.
 
-
-### Evaluation
-
-Please run the following command to evaluate the generalization performance of GenNBV.
-
-**Houses3K** (50 unseen houses from batch 12)
-
-```
-python active_reconstruction/eval/eval_gennbv_houses3k.py --sim_device=cuda:0 --num_envs=50 --stop_wandb=True
-```
 
 
 ## 📝 TODO List

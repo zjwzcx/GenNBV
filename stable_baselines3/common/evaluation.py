@@ -196,16 +196,11 @@ def evaluate_policy_grid_obs(
             UserWarning,
         )
 
-    # NOTE: initial step
-    # observations, rewards, dones, infos = env.reset()  # [num_env, obs_size], reset() in dict to array (self._gym_env.reset())
-    observations, rewards, dones, infos, accuracies = env.reset()  # [num_env, obs_size], reset() in dict to array (self._gym_env.reset())
-    rewards = rewards.to('cpu')
-
     # NOTE: align with the args_eval.num_envs in xxx_eval.py
-    n_envs = rewards.shape[0]
-    assert n_eval_episodes % n_envs == 0, "n_envs must be divisible by n_eval_episodes"
+    # n_envs = env.num_envs
+    n_envs = 50     # 50 evaluating envs
+    max_length = 30     # 30 steps per episode
 
-    max_length = 100
 
     episode_rewards = []
     episode_lengths = []
@@ -214,17 +209,20 @@ def evaluate_policy_grid_obs(
     # Divides episodes among different sub environments in the vector as evenly as possible
     episode_count_targets = torch.tensor([(n_eval_episodes + i) // n_envs for i in range(n_envs)], dtype=torch.int) # [n_envs], episode_count_targets.sum() == n_eval_episodes
     episode_counts = torch.zeros(n_envs, dtype=torch.uint8)
-    episode_starts = torch.ones((n_envs, ), dtype=torch.bool)
 
     current_rewards = torch.zeros(n_envs)
     current_lengths = torch.zeros(n_envs, dtype=torch.uint8)
 
-    current_rewards += rewards.to('cpu')    # accumulated reward
+    # observations = env.reset()  # [num_env, obs_size], reset() in dict to array (self._gym_env.reset())
+    # observations, rewards, dones, infos = env.reset()  # [num_env, obs_size], reset() in dict to array (self._gym_env.reset())
+    observations, rewards, dones, infos, accuracies = env.reset()  # [num_env, obs_size], reset() in dict to array (self._gym_env.reset())
 
+    # current_rewards += rewards.to('cpu')    # accumulated reward
+    # current_lengths += 1
 
-    if not return_AUC:  # debug
-        print("BUG!!!!!")
-        exit()
+    episode_starts = torch.ones((n_envs, ), dtype=torch.bool)
+
+    if not return_AUC:
         while (episode_counts < episode_count_targets).any():
             actions, _ = model.predict(
                 observations, state=None, deterministic=deterministic
@@ -275,26 +273,24 @@ def evaluate_policy_grid_obs(
 
             if render:
                 env.render()
-    else:
+    else:   # return_AUC = True
+        AUC_rews = torch.zeros(n_envs, max_length)
+        episode_done_flag = torch.zeros(n_envs)
 
-        AUC_rews = torch.zeros(n_eval_episodes, max_length)
-        episode_done_flag = torch.zeros(n_eval_episodes)    # num_env * num_repeat
-        episode_done_length = torch.zeros(n_eval_episodes)    # num_env * num_repeat
 
-        AUC_rews = AUC_update(AUC_rews.clone(), rewards.clone(), current_lengths, episode_done_flag)    # initial step
-
-        current_lengths += 1
-
+        assert episode_count_targets.max() <= 1.
+        global_length = 0
         while (episode_counts < episode_count_targets).any():
+            global_length += 1
+ 
             actions, _ = model.predict(observations, state=None, deterministic=deterministic)
             # observations, rewards, dones, infos = env.step(actions)     # step() in _worker()
             observations, rewards, dones, infos, accuracies = env.step(actions)     # step() in _worker(), accuracy
 
-            AUC_rews = AUC_update(AUC_rews.clone(), rewards.clone(), current_lengths, episode_done_flag)    # NOTE: AUC computation
+            AUC_rews = AUC_update(AUC_rews.clone(), rewards.clone(), global_length, dones, episode_done_flag) # NOTE: AUC computation
 
             current_rewards += rewards  # rewards.shape: (n_envs)
             current_lengths += 1
-
             for i in range(n_envs):
                 if episode_counts[i] < episode_count_targets[i]:
 
@@ -302,6 +298,7 @@ def evaluate_policy_grid_obs(
                     reward = rewards[i]
                     done = dones[i]
                     episode_starts[i] = done
+                    episode_done_flag[i] += done
 
                     if n_envs == 1:
                         info = infos[i]
@@ -326,15 +323,11 @@ def evaluate_policy_grid_obs(
                                 episode_lengths.append(info["episode"]["l"])
                                 # Only increment at the real end of an episode
                                 episode_counts[i] += 1
-                                episode_done_flag[episode_counts[i].item()*n_envs+i] += 1.
-                                episode_done_length[episode_counts[i].item()*n_envs+i] = current_lengths[i].item()
                         else:   # <-
                             accuracy = accuracies[str(i)]
                             episode_rewards.append(current_rewards[i].clone())
                             episode_lengths.append(current_lengths[i].clone())
                             episode_accuracies.append(accuracy)   # the order doesn't matter
-                            episode_done_flag[episode_counts[i].item()*n_envs+i] += 1.
-                            episode_done_length[episode_counts[i].item()*n_envs+i] = current_lengths[i].item()
                             episode_counts[i] += 1
 
                         # NOTE: initial step and corresponding info (rewards, ...) would be computed in next step
@@ -344,8 +337,8 @@ def evaluate_policy_grid_obs(
             if render:
                 env.render()
 
-    mean_AUC = sum([AUC_rews[:, idx] * (max_length - idx) for idx in range(max_length)]) / max_length   # [n_envs]
-    # mean_AUC = torch.stack([AUC_rews[:, idx] * (max_length - idx) for idx in range(max_length)], dim=1).sum(dim=1) / max_length   # [n_envs]
+        mean_AUC = sum([AUC_rews[:, idx] * (max_length - idx) for idx in range(max_length)]) / max_length   # [n_envs]
+
     mean_reward = np.mean(episode_rewards)  # rewards at the end of episodes from eval_envs
     std_reward = np.std(episode_rewards)
 
@@ -353,7 +346,7 @@ def evaluate_policy_grid_obs(
         assert mean_reward > reward_threshold, "Mean reward below threshold: " f"{mean_reward:.2f} < {reward_threshold:.2f}"
 
 
-    if return_AUC & return_Accuracy:
+    if return_Accuracy:
         return episode_rewards, episode_lengths, mean_AUC, episode_accuracies
     if return_AUC:
         return episode_rewards, episode_lengths, mean_AUC
@@ -361,31 +354,25 @@ def evaluate_policy_grid_obs(
         return episode_rewards, episode_lengths
     return mean_reward, std_reward
 
-def AUC_update(AUC_rews, cur_rewards, cur_lengths, episode_done_flag):
+
+def AUC_update(AUC_rews, cur_rewards, cur_lengths, dones, episode_done_flag):
     """
     Params:
-        # AUC_rews: (n_envs, max_length)
-        # cur_lengths: scaler
-        # episode_done_flag: (n_envs), if done in this episode\
-        # dones: (n_envs), if done after this step
-
-        AUC_rews: (n_eval_episodes, 500)
+        AUC_rews: (n_envs, 100)
         cur_rewards: (n_envs)
-        cur_lengths: (n_envs), from 0 to max_length-1 within one episode
-        episode_done_flag: (n_eval_episodes)
-        n_rounds
+        # cur_lengths: (n_envs), from 1 to max_length within one episode
+        cur_lengths: scaler
+        dones: (n_envs), if done after this step
+        episode_done_flag: (n_envs), if done in this episode
     """
-    n_envs = cur_rewards.shape[0]
-    n_finished_episode = [episode_done_flag[env_idx::n_envs].sum() for env_idx in range(n_envs)]    # [n_envs]
 
-    for env_episode_idx in range(episode_done_flag.shape[0]):
-        env_idx = env_episode_idx % n_envs
-        # if episode_done_flag[env_episode_idx]:
-        #     AUC_rews[env_episode_idx, cur_lengths[env_idx].item()] = AUC_rews[env_episode_idx, cur_lengths[env_idx].item() - 1]
-        # else:
-        if (not episode_done_flag[env_episode_idx]) and (env_episode_idx == (n_finished_episode[env_idx] * n_envs + env_idx)):
-            if cur_lengths[env_idx].item() >= AUC_rews.shape[0]:
-                break
-            AUC_rews[env_episode_idx, cur_lengths[env_idx].item()] = cur_rewards[env_idx].cpu().clone()
+    n_envs = cur_rewards.shape[0]   # 50 envs (objects)
+    for env_idx in range(n_envs):
+        if episode_done_flag[env_idx]:
+            # AUC_rews[env_idx, cur_lengths[env_idx].item()-1] = AUC_rews[env_idx, cur_lengths[env_idx].item()-2]
+            AUC_rews[env_idx, cur_lengths-1] = AUC_rews[env_idx, cur_lengths-2]
+        elif dones[env_idx] == 0.:
+            # AUC_rews[env_idx, cur_lengths[env_idx].item()-1] = cur_rewards[env_idx]
+            AUC_rews[env_idx, cur_lengths-1] = cur_rewards[env_idx]
 
     return AUC_rews

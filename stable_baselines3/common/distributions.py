@@ -645,7 +645,6 @@ class TanhBijector:
 def make_proba_distribution(
     action_space: gym.spaces.Space,
     use_sde: bool = False,
-    action_dim: int = -1,
     dist_kwargs: Optional[Dict[str, Any]] = None
 ) -> Distribution:
     """
@@ -663,8 +662,6 @@ def make_proba_distribution(
     if isinstance(action_space, spaces.Box):
         assert len(action_space.shape) == 1, "Error: the action space must be a vector"
         cls = StateDependentNoiseDistribution if use_sde else DiagGaussianDistribution
-        if action_dim != -1:
-            return cls(action_dim, **dist_kwargs)
         return cls(get_action_dim(action_space), **dist_kwargs)
     elif isinstance(action_space, spaces.Discrete):
         return CategoricalDistribution(action_space.n, **dist_kwargs)

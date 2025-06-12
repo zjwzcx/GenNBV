@@ -51,6 +51,8 @@ class DroneVisualInputEnv(DroneRobot):
         # additional stat
         self.rewbuffer = deque(maxlen=100)
         self.lenbuffer = deque(maxlen=100)
+        self.x_dist_buffer = deque(maxlen=100)
+        self.y_dist_buffer = deque(maxlen=100)
 
         self.cur_reward_sum = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self.cur_episode_length = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
@@ -188,14 +190,13 @@ class DroneVisualInputEnv(DroneRobot):
         new_ids = (dones > 0).nonzero(as_tuple=False)
         self.rewbuffer.extend(self.cur_reward_sum[new_ids][:, 0].cpu().detach().numpy().tolist())
         self.lenbuffer.extend(self.cur_episode_length[new_ids][:, 0].cpu().detach().numpy().tolist())
-
         self.cur_reward_sum[new_ids] = 0
         self.cur_episode_length[new_ids] = 0
 
-        # self.extras["episode"]["episode_reward"] = np.mean(self.rewbuffer) if len(self.rewbuffer) > 0 else 0.
-        self.extras["episode"]["episode_reward"] = np.mean(self.rewbuffer) / self.max_episode_length_s if len(self.rewbuffer) > 0 else 0.   # rollout/episode_reward
+        self.extras["episode"]["episode_reward"] = np.mean(self.rewbuffer) if len(self.rewbuffer) > 0 else 0.
         self.extras["episode"]["episode_length"] = np.mean(self.lenbuffer) if len(self.lenbuffer) > 0 else 0.
-
+        # self.extras["episode"]["episode_moving_dist_x"] = np.mean(self.x_dist_buffer) if len(self.x_dist_buffer) > 0 else 0.
+        # self.extras["episode"]["episode_moving_dist_y"] = np.mean(self.y_dist_buffer) if len(self.y_dist_buffer) > 0 else 0.
 
     def reset(self):
         """ Reset all robots"""
@@ -204,6 +205,11 @@ class DroneVisualInputEnv(DroneRobot):
         return obs
 
     def reset_idx(self, env_ids):
+        # # update dist info before reset
+        # x_dist = np.abs((self.base_pos[env_ids][..., 0] - self.env_origins[:, 0][env_ids]).cpu().detach().numpy())
+        # y_dist = np.abs((self.base_pos[env_ids][..., 1] - self.env_origins[:, 1][env_ids]).cpu().detach().numpy())
+        # self.x_dist_buffer.extend(x_dist)
+        # self.y_dist_buffer.extend(y_dist)
         return super(DroneVisualInputEnv, self).reset_idx(env_ids)
 
     def add_visual_obs_noise(self):
@@ -292,8 +298,6 @@ class DroneVisualInputEnv(DroneRobot):
 
 
 if __name__ == "__main__":
-    import legged_complex_env
-
     args = get_args()
     args.headless = False
     args.sim_device = "cuda"

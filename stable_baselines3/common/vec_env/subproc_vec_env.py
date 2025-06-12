@@ -39,7 +39,7 @@ def _worker(
                 #     reward = reward.clone()     # otherwise the reward of last step would be initial reward (0.187) due to tensor charactristics
 
                 #     # save final observation where user can get it, then reset
-                #     # info["terminal_observation"] = observation  # NOTE: seemingly useless (?)
+                #     # info["terminal_observation"] = observation  # TODO: seemingly useless (?)
 
                 #     # observation = env.reset()
                 #     # observation, _, _, _ = env.reset()
@@ -130,7 +130,7 @@ class SubprocVecEnv(VecEnv):
         if actions.shape[0] == 1:
             for remote, action in zip(self.remotes, actions):
                 remote.send(("step", action))
-        else:   # debug
+        else:   # TODO: !!!!!!!!!
             assert len(self.remotes) == 1
             self.remotes[0].send(("step", actions))
         self.waiting = True
@@ -249,9 +249,10 @@ def _flatten_obs(obs: Union[List[VecEnvObs], Tuple[VecEnvObs]], space: gym.space
         assert isinstance(obs[0], dict), "non-dict observation for environment with Dict observation space"
 
         assert len(obs) == 1    # TODO: !!!!!!!!
-        if 'state' in obs[0]:
-            if is_tensor(obs[0]['state']):
-                return OrderedDict([(k, obs[0][k]) for k in space.spaces.keys()])
+        if ('state' in obs[0]) and is_tensor(obs[0]['state']):
+            return OrderedDict([(k, obs[0][k]) for k in space.spaces.keys()])
+        # if ('state_rgb' in obs[0]) and is_tensor(obs[0]['state_rgb']):
+        #     return OrderedDict([(k, obs[0][k]) for k in space.spaces.keys()])
         return OrderedDict([(k, np.stack([o[k] for o in obs])) for k in space.spaces.keys()])
     elif isinstance(space, gym.spaces.Tuple):
         assert isinstance(obs[0], tuple), "non-tuple observation for environment with Tuple observation space"

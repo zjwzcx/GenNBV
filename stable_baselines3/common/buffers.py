@@ -498,7 +498,7 @@ class TensorRolloutBuffer(BaseBuffer):
         num_envs = n_envs
         self.gae_lambda = gae_lambda
         self.gamma = gamma
-        # obs_shape = observation_space.shape[0]
+        # obs_shape = observation_space.shape[0]    # TODO
         # if observation_space.shape is None: # Dict
         #     obs_shape = reduce(lambda x, y: x * y, observation_space["image"].shape) + reduce(lambda x, y: x * y, observation_space["state"].shape)
         # else:
@@ -656,7 +656,7 @@ class TensorRolloutBuffer_Grid_Obs(BaseBuffer):
         num_transitions_per_env = self.num_transitions_per_env
         num_envs = self.num_envs
 
-        self.observations = th.zeros(num_transitions_per_env, num_envs, *self.obs_shape, device=self.device)    # [num_transitions_per_env, num_envs, obs_shape]
+        self.observations = th.zeros(num_transitions_per_env, num_envs, *self.obs_shape, device=self.device)
         self.privileged_observations = None
         self.rewards = th.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
         self.actions = th.zeros(num_transitions_per_env, num_envs, self.actions_shape, device=self.device)
@@ -686,147 +686,9 @@ class TensorRolloutBuffer_Grid_Obs(BaseBuffer):
             episode_start = th.from_numpy(episode_start)
         if self.step >= self.num_transitions_per_env:
             raise AssertionError("Rollout buffer overflow")
-        # if type(obs) is dict:
-        #     obs = th.cat((obs["state"], obs["image"].view(self.num_envs, -1)), dim=1)
-        if type(obs) is tuple:
-            obs = obs[0]
-        self.observations[self.step].copy_(obs)
-        # if self.privileged_observations is not None:
-        #     self.privileged_observations[self.step].copy_(transition.critic_observations)
-        self.actions[self.step].copy_(action)
-        self.rewards[self.step].copy_(reward.view(-1, 1))
-        self.episode_starts[self.step].copy_(episode_start.view(-1, 1))
-        self.values[self.step].copy_(value)
-        self.log_probs[self.step].copy_(log_prob.view(-1, 1))
-        self.step += 1
-        self.pos += 1
-        if self.pos == self.buffer_size:
-            self.full = True
-
-    def compute_returns_and_advantage(self, last_values: th.Tensor, dones) -> None:
-        # Convert to numpy
-        last_values = last_values.clone().detach()
-
-        last_gae_lam = 0
-        for step in reversed(range(self.buffer_size)):
-            if step == self.buffer_size - 1:
-                next_non_terminal = 1.0 - dones.long()
-                next_values = last_values
-            else:
-                next_non_terminal = 1.0 - self.episode_starts[step + 1]
-                next_values = self.values[step + 1]
-            next_non_terminal = next_non_terminal.view(-1, 1)
-            delta = self.rewards[step] + self.gamma * next_values * next_non_terminal - self.values[step]
-            last_gae_lam = delta + self.gamma * self.gae_lambda * next_non_terminal * last_gae_lam
-            self.advantages[step] = last_gae_lam
-        # TD(lambda) estimator, see Github PR #375 or "Telescoping in TD(lambda)"
-        # in David Silver Lecture 4: https://www.youtube.com/watch?v=PnHCvfgC_ZA
-        self.returns = self.advantages + self.values
-
-    def get(self, batch_size: Optional[int] = None) -> Generator[RolloutBufferSamples, None, None]:
-        assert self.step == self.num_transitions_per_env, ""
-        # Prepare the data
-        if not self.generator_ready:
-
-            _tensor_names = [
-                "observations",
-                "actions",
-                "values",
-                "log_probs",
-                "advantages",
-                "returns",
-            ]
-
-            for tensor in _tensor_names:
-                self.__dict__[tensor] = self.swap_and_flatten(self.__dict__[tensor])
-            self.generator_ready = True
-
-        # Return everything, don't create minibatches
-        if batch_size is None:
-            batch_size = self.buffer_size * self.n_envs
-
-        start_idx = 0
-        while start_idx < self.buffer_size * self.n_envs:
-            yield self._get_samples(self.indices[int(start_idx):int(start_idx) + int(batch_size)])
-            start_idx += batch_size
-
-    def _get_samples(self, batch_inds: np.ndarray, env: Optional[VecNormalize] = None) -> RolloutBufferSamples:
-        data = (
-            self.observations[batch_inds],
-            self.actions[batch_inds],
-            self.values[batch_inds].flatten(),
-            self.log_probs[batch_inds].flatten(),
-            self.advantages[batch_inds].flatten(),
-            self.returns[batch_inds].flatten(),
-        )
-        return RolloutBufferSamples(*data)
-
-
-class TensorRolloutBuffer_HybridAction(BaseBuffer):
-    def __init__(
-        self,
-        buffer_size: int,
-        observation_space: spaces.Space,
-        action_space: spaces.Space,
-        device: Union[th.device, str] = "cpu",
-        gae_lambda: float = 1,
-        gamma: float = 0.99,
-        n_envs: int = 1,
-    ):
-        super().__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
-        num_transitions_per_env = buffer_size
-        num_envs = n_envs
-        self.gae_lambda = gae_lambda
-        self.gamma = gamma
-        obs_shape = observation_space.shape
-        actions_shape = action_space.shape[0]
-        self.obs_shape = obs_shape
-        self.device = device
-
-        self.actions_shape = actions_shape
-        self.actions_conti_shape = actions_shape - 1    # NOTE
-
-        self.num_transitions_per_env = num_transitions_per_env
-        self.num_envs = num_envs
-        self.reset()
-
-    def reset(self) -> None:
-        num_transitions_per_env = self.num_transitions_per_env
-        num_envs = self.num_envs
-
-        self.observations = th.zeros(num_transitions_per_env, num_envs, *self.obs_shape, device=self.device)    # [num_transitions_per_env, num_envs, obs_shape]
-        self.privileged_observations = None
-        self.rewards = th.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
-        self.actions = th.zeros(num_transitions_per_env, num_envs, self.actions_shape, device=self.device)
-        self.episode_starts = th.zeros(num_transitions_per_env, num_envs, 1, device=self.device).byte()
-
-        # For PPO
-        self.log_probs = th.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
-        self.values = th.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
-        self.returns = th.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
-        self.advantages = th.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
-
-        self.step = 0
-        self.generator_ready = False
-        self.indices = np.random.permutation(self.buffer_size * self.n_envs)
-        super(TensorRolloutBuffer_HybridAction, self).reset()
-
-    def add(
-        self,
-        obs: np.ndarray,
-        action: np.ndarray,
-        reward: np.ndarray,
-        episode_start: np.ndarray,
-        value: th.Tensor,
-        log_prob: th.Tensor,
-    ) -> None:
-        if isinstance(episode_start, np.ndarray):
-            episode_start = th.from_numpy(episode_start)
-        if self.step >= self.num_transitions_per_env:
-            raise AssertionError("Rollout buffer overflow")
-        # if type(obs) is dict:
-        #     obs = th.cat((obs["state"], obs["image"].view(self.num_envs, -1)), dim=1)
-        if type(obs) is tuple:
+        if type(obs) is dict:   # TODO
+            obs = th.cat((obs["state"], obs["image"].view(self.num_envs, -1)), dim=1)
+        elif type(obs) is tuple:
             obs = obs[0]
         self.observations[self.step].copy_(obs)
         # if self.privileged_observations is not None:

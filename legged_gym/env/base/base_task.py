@@ -57,7 +57,6 @@ class BaseTask():
         # graphics device for rendering, -1 for no rendering
         self.graphics_device_id = self.sim_device_id
 
-        # from legged_complex_env.env.env_config import LeggedVisualInputConfig
         # if self.headless == True and not isinstance(cfg, LeggedVisualInputConfig):
         #     self.graphics_device_id = -1
 
@@ -93,6 +92,8 @@ class BaseTask():
         # create envs, sim and viewer
         self.create_sim()
         self.gym.prepare_sim(self.sim)
+
+        # todo: read from config
         self.enable_viewer_sync = True
         self.viewer = None
 

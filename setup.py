@@ -24,7 +24,6 @@ setup(
         "yapf~=0.30.0",
         "wandb",
         "opencv-python>=3.0.0"
-        # "gym<=0.21.0", "setuptools<=51.0"
     ],
     cmdclass={
         'build_ext': BuildExtension

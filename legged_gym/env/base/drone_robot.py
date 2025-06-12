@@ -145,7 +145,7 @@ class DroneRobot(BaseTask):
         # self.compute_reward()
         # env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
         # self.reset_idx(env_ids)
-        # self.compute_observations()  # in some cases a simulation step might be required to refresh some obs (for example body positions)
+        # self.compute_observations()  # in some cases a simulation step might be required to refresh some obs (for example body positions) TODO
 
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
@@ -231,15 +231,13 @@ class DroneRobot(BaseTask):
         for i in range(len(self.reward_functions)):
             name = self.reward_names[i]
             rew = self.reward_functions[i]() * self.reward_scales[name] # [num_envs]
-
             self.rew_buf += rew
             self.episode_sums[name] += rew
             pass
-
         if self.cfg.rewards.only_positive_rewards:
             self.rew_buf[:] = torch.clip(self.rew_buf[:], min=0.)
 
-        # termination is exincluded in the above loop
+        # add termination reward after clipping
         if "termination" in self.reward_scales:
             rew = self._reward_termination() * self.reward_scales["termination"]
             self.rew_buf += rew
@@ -317,7 +315,7 @@ class DroneRobot(BaseTask):
                 friction_buckets = torch_rand_float(
                     friction_range[0], friction_range[1], (num_buckets, 1), device='cpu'
                 )
-                self.friction_coeffs = friction_buckets[bucket_ids].to(self.device)
+                self.friction_coeffs = friction_buckets[bucket_ids]
 
             for s in range(len(props)):
                 props[s].friction = self.friction_coeffs[env_id]
@@ -456,25 +454,29 @@ class DroneRobot(BaseTask):
         )
 
     def _reset_root_states(self, env_ids):
-        """ Resets the root states of agents in envs to be reseted
+        """ Resets ROOT states position and velocities of selected environmments
+            Sets base position based on the curriculum
+            Selects randomized base velocities within -0.5:0.5 [m/s, rad/s]
         Args:
             env_ids (List[int]): Environemnt ids
         """
+        # base position
         if self.custom_origins:
             self.root_states[::self.skip][env_ids] = self.base_init_state
             self.root_states[::self.skip][env_ids, :3] += self.env_origins[env_ids]
             self.root_states[::self.skip][env_ids, :2] += torch_rand_float(
                 -1., 1., (len(env_ids), 2), device=self.device
             )  # xy position within 1m of the center
-        else:   # <-
+        else:
             self.root_states[::self.skip][env_ids] = self.base_init_state
             self.root_states[::self.skip][env_ids, :3] += self.env_origins[env_ids]
-
+        # base velocities
+        self.root_states[::self.skip][env_ids, 7:13] = torch_rand_float(
+            -0.5, 0.5, (len(env_ids), 6), device=self.device
+        )  # [7:10]: lin vel, [10:13]: ang vel
         env_ids_int32 = env_ids.clone().to(dtype=torch.int32) * self.skip
         self.gym.set_actor_root_state_tensor_indexed(
-            self.sim,
-            gymtorch.unwrap_tensor(self.root_states),
-            gymtorch.unwrap_tensor(env_ids_int32),
+            self.sim, gymtorch.unwrap_tensor(self.root_states), gymtorch.unwrap_tensor(env_ids_int32),
             len(env_ids_int32)
         )
 
@@ -609,7 +611,7 @@ class DroneRobot(BaseTask):
             [self.obs_scales.lin_vel, self.obs_scales.lin_vel, self.obs_scales.ang_vel],
             device=self.device,
             requires_grad=False,
-        )
+        )  # TODO change this
         self.feet_air_time = torch.zeros(
             self.num_envs, self.feet_indices.shape[0], dtype=torch.float, device=self.device, requires_grad=False
         )
@@ -670,19 +672,11 @@ class DroneRobot(BaseTask):
         self.reward_functions = []
         self.reward_names = []
 
-        # TODO: hand-crafted order!!!!!!!!
-        key_order = list(self.reward_scales)
-        if "surface_coverage" in self.reward_scales:    
+        if "surface_coverage" in self.reward_scales:    # TODO: !!!!!!!!
+            key_order = list(self.reward_scales)
             key_order.remove("surface_coverage")
             key_order.insert(0, "surface_coverage")
-        if "surface_coverage_2D" in self.reward_scales:
-            key_order.remove("surface_coverage_2D")
-            key_order.insert(0, "surface_coverage_2D")
-        if "collision" in self.reward_scales:
-            key_order.remove("collision")
-            key_order.insert(-1, "collision")
-        self.reward_scales = {key: self.reward_scales[key] for key in key_order}
-
+            self.reward_scales = {key: self.reward_scales[key] for key in key_order}
         for name, scale in self.reward_scales.items():
             if name == "termination":
                 continue
@@ -865,7 +859,7 @@ class DroneRobot(BaseTask):
             self.max_terrain_level = self.cfg.terrain.num_rows
             self.terrain_origins = torch.from_numpy(self.terrain.env_origins).to(self.device).to(torch.float)
             self.env_origins[:] = self.terrain_origins[self.terrain_levels, self.terrain_types]
-        else:   # <-
+        else:
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
             # create a grid of robots
@@ -878,8 +872,7 @@ class DroneRobot(BaseTask):
             self.env_origins[:, 2] = 0.
 
     def _parse_cfg(self, cfg):
-        # self.dt = self.cfg.control.decimation * self.sim_params.dt  # 0.0199999 = 4 * 0.00499999
-        self.dt = self.cfg.control.decimation * 0.005  # NOTE: 0.02 = 4 * 0.005
+        self.dt = self.cfg.control.decimation * self.sim_params.dt  # 0.0199999 = 4 * 0.00499999
         self.obs_scales = self.cfg.normalization.obs_scales
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)     # search '_reward' function
         self.command_ranges = class_to_dict(self.cfg.commands.ranges)

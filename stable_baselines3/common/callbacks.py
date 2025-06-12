@@ -607,7 +607,7 @@ class EvalCallback_Grid_Obs(EventCallback):
             #     callback=self._log_success_callback,
             # )
 
-            # # NOTE: AUC
+            # # NOTE: AUC computation
             # episode_rewards, episode_lengths, mean_AUC = evaluate_policy_grid_obs(
             #     self.model,
             #     self.eval_env,
@@ -622,7 +622,6 @@ class EvalCallback_Grid_Obs(EventCallback):
             # )
 
             # NOTE: AUC + Accuracy computation
-            return_Accuracy = True
             episode_rewards, episode_lengths, mean_AUC, episode_accuracies = evaluate_policy_grid_obs(
                 self.model,
                 self.eval_env,
@@ -631,7 +630,7 @@ class EvalCallback_Grid_Obs(EventCallback):
                 deterministic=self.deterministic,
                 return_episode_rewards=True,
                 return_AUC=True,
-                return_Accuracy=return_Accuracy,
+                return_Accuracy=True,
                 warn=self.warn,
                 callback=self._log_success_callback,
             )
@@ -658,8 +657,7 @@ class EvalCallback_Grid_Obs(EventCallback):
             mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
             mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
             mean_AUC = np.mean(mean_AUC.numpy())    # [num_env] -> [1], actually mean of mean_AUC, mean value of objects along the time
-            if return_Accuracy:
-                mean_accuracy = np.mean(episode_accuracies)
+            mean_accuracy = np.mean(episode_accuracies)
             self.last_mean_reward = mean_reward
 
             if self.verbose > 0:
@@ -671,8 +669,7 @@ class EvalCallback_Grid_Obs(EventCallback):
             # Add to current Logger
             self.logger.record("eval/mean_reward", float(mean_reward))
             self.logger.record("eval/mean_AUC", float(mean_AUC))
-            if return_Accuracy:
-                self.logger.record("eval/mean_accuracy", float(mean_accuracy))
+            self.logger.record("eval/mean_accuracy", float(mean_accuracy))
             self.logger.record("eval/mean_ep_length", mean_ep_length)
 
             if len(self._is_success_buffer) > 0:

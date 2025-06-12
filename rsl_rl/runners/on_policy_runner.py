@@ -40,6 +40,8 @@ from rsl_rl.algorithms import PPO
 from rsl_rl.modules import ActorCritic, ActorCriticRecurrent
 from rsl_rl.env import VecEnv
 
+# from legged_complex_env.env.legged_visual_input import LeggedVisualInputEnv
+
 
 class OnPolicyRunner:
     def __init__(self, env: VecEnv, train_cfg, log_dir=None, device='cpu'):
@@ -78,7 +80,6 @@ class OnPolicyRunner:
         _ = self.env.reset()
 
     def learn(self, num_learning_iterations, init_at_random_ep_len=False):
-        from legged_complex_env.env.legged_visual_input import LeggedVisualInputEnv
         # initialize writer
         if self.log_dir is not None and self.writer is None:
             self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
@@ -105,11 +106,13 @@ class OnPolicyRunner:
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
                     actions = self.alg.act(obs, critic_obs)
-                    if isinstance(self.env, LeggedVisualInputEnv):
-                        obs, rewards, dones, infos = self.env.step(actions)
-                        privileged_obs = None
-                    else:
-                        obs, privileged_obs, rewards, dones, infos = self.env.step(actions)
+                    obs, rewards, dones, infos = self.env.step(actions)
+                    privileged_obs = None
+                    # if isinstance(self.env, LeggedVisualInputEnv):
+                    #     obs, rewards, dones, infos = self.env.step(actions)
+                    #     privileged_obs = None
+                    # else:
+                    #     obs, privileged_obs, rewards, dones, infos = self.env.step(actions)
                     critic_obs = privileged_obs if privileged_obs is not None else obs
                     obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(
                         self.device
