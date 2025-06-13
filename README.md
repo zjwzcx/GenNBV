@@ -138,11 +138,15 @@ python gennbv/train/train_gennbv.py --sim_device=cuda:0 --num_envs=256 --headles
 If you want to customize a novel training environment, you need to create your environment and configuration files in `gennbv/env` and then define the task in `gennbv/__init__.py`.
 
 
+### Pretrained Checkpoint
+
+We also provide the pretrained checkpoints of GenNBV [[HERE](https://drive.google.com/drive/folders/1UUzLhr28TzL-jS1MmjyicEtobFXrn7UB?usp=sharing)].
 
 ## 📝 TODO List
 - \[x\] Release the paper and training code.
 - \[x\] Release preprocessed dataset.
 - \[x\] Release the evaluation scripts.
+- \[x\] Release the pretrained checkpoint.
 
 ## 📦 Model and Benchmark
 ### Model Overview
