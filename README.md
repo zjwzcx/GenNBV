@@ -169,8 +169,10 @@ If you find our work helpful, please cite it:
 @inproceedings{chen2024gennbv,
   title={GenNBV: Generalizable Next-Best-View Policy for Active 3D Reconstruction},
   author={Chen, Xiao and Li, Quanyi and Wang, Tai and Xue, Tianfan and Pang, Jiangmiao},
-  year={2024}
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  booktitle={2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={16436--16445},
+  year={2024},
+  organization={IEEE}
 }
 ```
 
